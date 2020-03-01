@@ -28,57 +28,67 @@ encode_map = {
     UTF8_STRING_PAIR: encode_utf8_string_pair
 }
 
+class StreamLengthError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+def check_stream_type(stream):
+    if type(stream) is not bytes:
+        raise Exception('Stream type is not bytes')
+
 def decode(stream, data_type):
     if not decode_map.has_key(data_type):
         raise Exception('Unvalid data type')
     return decode_map[data_type](stream)
 
 def decode_byte(stream):
+    check_stream_type(stream)
     if len(stream) < 1:
-        raise Exception('Malformed Variable Byte Integer')
+        raise StreamLengthError("Stream can't load byte (1)")
     value = struct.unpack(">B", stream[:1])[0]
     return value, 1
 
 def decode_two_byte_int(stream):
+    check_stream_type(stream)
     if len(stream) < 2:
-        raise Exception('Malformed Variable Byte Integer')
+        raise StreamLengthError("Stream can't load short int (2)")
     value = struct.unpack(">H", stream[:2])[0]
     return value, 2
 
 def decode_four_byte_int(stream):
+    check_stream_type(stream)
     if len(stream) < 4:
-        raise Exception('Malformed Variable Byte Integer')
+        raise StreamLengthError("Stream can't load long int (4)")
     value = struct.unpack(">L", stream[:4])[0]
     return value, 4
-
-def decode_utf8_encoded_string(stream):
-    string_length, index = decode_two_byte_int(stream)
-    if len(stream) < index + string_length:
-        raise Exception('Malformed Variable Byte Integer')
-    value = stream[index:(string_length+index)].decode("utf-8")
-    return value, string_length + index
 
 def decode_variable_byte_int(stream):
     multiplier = 1
     value = 0
-    index = 0
-    while len(stream) >= index + 1:
-        encoded_byte = struct.unpack(">B", stream[index:index+1])[0]
-        value += (encoded_byte & 0x7F) * multiplier
+    number_of_bytes = 0
+    while True:
+        byte, index = decode_byte(stream)
+        stream = stream[index:]
+        value += (byte & 0x7F) * multiplier
         if multiplier > 0x80**3:
             raise Exception('Malformed Variable Byte Integer')
         multiplier *= 0x80
-        index += 1
-        if encoded_byte & 0x80 == 0:
-            return value, index
-    return -1, -1
+        number_of_bytes += 1
+        if byte & 0x80 == 0:
+            break
+    return value, number_of_bytes
 
 def decode_binary_data(stream):
-    data_length, index = decode_two_byte_int(stream)
-    if len(stream) < index + string_length:
-        raise Exception('Malformed Variable Byte Integer')
-    value = stream[index:(string_length+index)]
-    return value, string_length + index
+    length, index = decode_two_byte_int(stream)
+    stream = stream[index:]
+    if len(stream) < length:
+        raise StreamLengthError("Stream can't load data (" + str(length + index) + ")")
+    value = stream[:length]
+    return value, length + index
+
+def decode_utf8_encoded_string(stream):
+    value, index = decode_binary_data(stream)
+    return value.decode("utf-8"), index
 
 def decode_utf8_string_pair(stream):
     key, index1 = decode_utf8_string_pair(stream)
@@ -101,8 +111,8 @@ def encode_four_byte_int(value):
 
 def encode_utf8_encoded_string(value):
     stream = value.encode("utf-8")
-    string_length = encode_two_byte_int(len(stream))
-    return string_length + stream
+    length = encode_two_byte_int(len(stream))
+    return length + stream
 
 def encode_variable_byte_int(value):
     stream = b""
@@ -115,10 +125,11 @@ def encode_variable_byte_int(value):
     return stream
 
 def encode_binary_data(value):
-    data_length = encode_two_byte_int(len(value))
-    return data_length + value
+    length = encode_two_byte_int(len(value))
+    return length + value
 
 def encode_utf8_string_pair(value):
     string1 = encode_utf8_string_pair(value[0])
     string2 = encode_utf8_string_pair(value[1])
     return string1 + string2
+

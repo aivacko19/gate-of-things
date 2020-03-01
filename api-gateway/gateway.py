@@ -4,7 +4,8 @@ import socket
 import selectors
 
 class Selector(selectors.DefaultSelector()):
-    def __init__(self):
+    def __init__(self, protocol):
+        self.protocol = protocol
         super().__init__()
 
     def register_listener(self, socket):
@@ -25,6 +26,19 @@ class Selector(selectors.DefaultSelector()):
     def register_write(self, socket, message):
         self.register_client(socket, message, selectors.EVENT_WRITE)
 
+    def register_new_message(self, socket):
+        message = self.protocol.create(socket.fileno(), socket.getpeername())
+        self.register_read(socket, message)
+
+    def register_from_action(self, socket, message, action):
+        if action == 'wait':
+            self.unregister(socket)
+        elif action == 'write':
+            self.register_write(socket, message)
+        else:
+            self.register_new_message(socket)
+
+
 def start_listening(host, protocol, request_queue, response_queue):
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
@@ -32,7 +46,7 @@ def start_listening(host, protocol, request_queue, response_queue):
         listener.bind((host, protocol.get_port()))
         listener.listen()
 
-        with Selector() as selector:
+        with Selector(protocol) as selector:
 
             selector.register_listener(listener)
             connections = {}  
@@ -44,10 +58,8 @@ def start_listening(host, protocol, request_queue, response_queue):
 
                         if key.data is None:
                             client, addr = listener.accept()
-                            fd = client.fileno()
-                            connections[fd] = client
-                            message = protocol.create(fd, addr)
-                            selector.register_read(client, message)
+                            connections[client.fileno()] = client
+                            selector.register_new_message(client)
 
                         else:
                             client = key.fileobj
@@ -56,47 +68,54 @@ def start_listening(host, protocol, request_queue, response_queue):
                             if mask is selectors.EVENT_READ:
                                 finished = read(client, message)
                                 if finished:
-                                    if message.disconnect:
-                                        selector.register_write(client, message)
-                                    else:
-                                        try:
-                                            selector.unregister(client)
-                                        except Exception as e:
-                                            print(
-                                                f"error: selector.unregister() exception for",
-                                                f"{client.getpeername()}: {repr(e)}",
-                                            )  
+                                    action = message.action()
+                                    try:
+                                        selector.register_from_action(client, message, action)
+                                    except Exception as e:
+                                        print(
+                                            f"error: selector.unregister() exception for",
+                                            f"{client.getpeername()}: {repr(e)}",
+                                        )  
+                                    if action == 'wait':
                                         request_queue.put(message.request)
 
                             elif mask is selectors.EVENT_WRITE:
                                 finished = write(client, message)
                                 if finished:
-                                    fd = client.fileno()
-                                    if message.disconnect:
-                                        try:
+                                    try:
+                                        if message.disconnect:
                                             selector.unregister(client)
-                                        except Exception as e:
-                                            print(
-                                                f"error: selector.unregister() exception for",
-                                                f"{client.getpeername()}: {repr(e)}",
-                                            ) 
-                                        del connections[fd]
-                                        try:
+                                            del connections[client.fileno()]
                                             client.close()
-                                        except OSError as e:
-                                            print(
-                                                f"error: socket.close() exception for",
-                                                f"{client.getpeername()}: {repr(e)}",
-                                            )
-                                    else:
-                                        message = protocol.create(fd, client.getpeername())
-                                        selectors.register_read(client, message)
+                                        else:
+                                            selector.register_new_message(client)
+                                    except OSError as e:
+                                        print(
+                                            f"error: socket.close() exception for",
+                                            f"{client.getpeername()}: {repr(e)}",
+                                        )
+                                    except Exception as e:
+                                        print(
+                                            f"error: selector.unregister() exception for",
+                                            f"{client.getpeername()}: {repr(e)}",
+                                        ) 
 
                     if not response_queue.empty():
                         response = response_queue.get()
                         message = protocol.create(response)
-                        client = connections[message.fd]
-                        register_write(client, message)
+                        if connections.has_key[message.fd]:
+                            client = connections[message.fd]
+                            message.create_response()
+                            action = message.action()
+                            try:
+                                selector.register_from_action(client, message, action)
+                            except Exception as e:
+                                print(
+                                    f"error: selector.unregister() exception for",
+                                    f"{client.getpeername()}: {repr(e)}",
+                                )  
+                            if action == 'wait':
+                                request_queue.put(message.request)
 
             except KeyboardInterrupt:
                 print("caught keyboard interrupt, exiting")
@@ -104,16 +123,15 @@ def start_listening(host, protocol, request_queue, response_queue):
                 for fd, client in connections:
                     try:
                         selector.unregister(client)
-                    except Exception as e:
-                        print(
-                            f"error: selector.unregister() exception for",
-                            f"{client.getpeername()}: {repr(e)}",
-                        ) 
-                    try:
                         client.close()
                     except OSError as e:
                         print(
                             f"error: socket.close() exception for",
+                            f"{client.getpeername()}: {repr(e)}",
+                        )
+                    except Exception as e:
+                        print(
+                            f"error: selector.unregister() exception for",
                             f"{client.getpeername()}: {repr(e)}",
                         )
 

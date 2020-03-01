@@ -13,16 +13,16 @@ import json
 import gateway
 import requester
 import receiver
-import mqtt
+from properties.mqtt.message import MessageFactory
 
 RABBITMQ_HOSTNAME = 'localhost'
 MY_HOSTNAME = 'localhost'
 RECEIVER_NAME = 'gateway_receive'
 SERVICE_NAMES = {
-    'connect', 'connect_service'
+    'connect': 'connect_service'
 }
 
-protocol = mqtt.MessageFactory()
+protocol = MessageFactory()
 
 with pika.BlockingConnection(pika.ConnectionParameters(RABBIT_MQ_HOST)) as connection
     request_queue = queue.Queue()

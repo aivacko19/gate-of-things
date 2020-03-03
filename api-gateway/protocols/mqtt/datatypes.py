@@ -1,12 +1,6 @@
 import struct
 
-BYTE = 1
-TWO_BYTE_INT = 2
-FOUR_BYTE_INT = 3
-UTF8_ENCODED_STRING = 4
-VARIABLE_BYTE_INT = 5
-BINARY_DATA = 6
-UTF8_STRING_PAIR = 7
+
 
 decode_map = {
     BYTE: decode_byte,
@@ -28,13 +22,25 @@ encode_map = {
     UTF8_STRING_PAIR: encode_utf8_string_pair
 }
 
-class StreamLengthError(Exception):
+class StreamLengthException(Exception):
     def __init__(self, message):
         super().__init__(message)
 
-def check_stream_type(stream):
+def check_bytes(stream):
     if type(stream) is not bytes:
-        raise Exception('Stream type is not bytes')
+        raise Exception('Parameter is not a byte string')
+
+def check_number(value):
+    if not isinstance(value, (int, long)):
+        raise Exception("Parameter is not a number")
+
+def check_string(value):
+    if type(value) is not str:
+        raise Exception("Parameter is not a string")
+
+def check_tuple(value):
+    if type(value) is not tuple:
+        raise Exception("Parameter is not a tuple")
 
 def decode(stream, data_type):
     if not decode_map.has_key(data_type):
@@ -42,21 +48,21 @@ def decode(stream, data_type):
     return decode_map[data_type](stream)
 
 def decode_byte(stream):
-    check_stream_type(stream)
+    check_bytes(stream)
     if len(stream) < 1:
         raise StreamLengthError("Stream can't load byte (1)")
     value = struct.unpack(">B", stream[:1])[0]
     return value, 1
 
 def decode_two_byte_int(stream):
-    check_stream_type(stream)
+    check_bytes(stream)
     if len(stream) < 2:
         raise StreamLengthError("Stream can't load short int (2)")
     value = struct.unpack(">H", stream[:2])[0]
     return value, 2
 
 def decode_four_byte_int(stream):
-    check_stream_type(stream)
+    check_bytes(stream)
     if len(stream) < 4:
         raise StreamLengthError("Stream can't load long int (4)")
     value = struct.unpack(">L", stream[:4])[0]
@@ -101,20 +107,19 @@ def encode(value, data_type):
     return encode_map[data_type](value)
 
 def encode_byte(value):
+    check_number(value)
     return struct.pack('B', value)
 
 def encode_two_byte_int(value):
+    check_number(value)
     return struct.pack(">H", value)
 
 def encode_four_byte_int(value):
-    return struct.pack(">H", value)
-
-def encode_utf8_encoded_string(value):
-    stream = value.encode("utf-8")
-    length = encode_two_byte_int(len(stream))
-    return length + stream
+    check_number(value)
+    return struct.pack(">L", value)
 
 def encode_variable_byte_int(value):
+    check_number(value)
     stream = b""
     while value > 0:
         byte = value % 0x80
@@ -125,10 +130,18 @@ def encode_variable_byte_int(value):
     return stream
 
 def encode_binary_data(value):
+    check_bytes(value)
     length = encode_two_byte_int(len(value))
     return length + value
 
+def encode_utf8_encoded_string(value):
+    check_string(value)
+    return encode_binary_data(value.encode("utf-8"))
+
 def encode_utf8_string_pair(value):
+    check_tuple(value)
+    if len(value) < 2:
+        raise Exception("Parameter tuple is shorter than 2")
     string1 = encode_utf8_string_pair(value[0])
     string2 = encode_utf8_string_pair(value[1])
     return string1 + string2

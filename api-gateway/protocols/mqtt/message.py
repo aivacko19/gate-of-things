@@ -7,6 +7,7 @@ import properties
 
 from datatypes import encode
 from properties import encode_properties
+from stream import MQTTStream
 
 RESERVED = 0
 CONNECT = 1
@@ -26,21 +27,25 @@ DISCONNECT = 14
 AUTH = 15
 WILL = 16
 
-class MessageFactory:
+class MalformedPacketException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+class MQTTFactory:
     def __init__(self):
         self.port = 1887
 
     def get_port():
         return self.port
 
-    def create(fd, addr):
-        return Message(fd, addr)
+    def create_stream():
+        return MQTTStream()
 
+    def create_message():
+        return MQTTMessage()
 
-class Message:
-    def __init__(self, fd, addr):
-        self.fd = fd
-        self.addr = addr
+class MQTTMessage:
+    def __init__(self):
         self._buffer = b""
         self._jsonheader_len = None
         self.jsonheader = None
@@ -78,7 +83,98 @@ class Message:
         if self._length is not None:
             self._length -= index
         return value
-    
+
+    def read(self, stream):
+        packet_type, dup, qos, retain = stream.get_header()
+
+        if packet_type == RESERVED:
+            raise MalformedPacketException("Bad packet type")
+        self._packet['type'] = packet_type
+
+        if packet_type != PUBLISH:
+            if dup or retain or qos != 0:
+                raise MalformedPacketException("Bytes 0-3 reserved")
+
+            if packet_type == PINGREQ:
+                self._packet['type'] = PINGRESP
+                self._action = 'write'
+                return
+
+            if packet_type == PINGRESP:
+                self._action = 'listen'
+                return 
+
+            if packet_type == CONNECT:
+                self.read_connect_packet(stream)
+                return 
+
+            if packet_type == CONNACK:
+                self.read_connack_packet(stream)
+                return
+
+            if packet_type in [SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK]:
+                self.read_sub_packet(stream)
+                return 
+
+            if packet_type not in [DISCONNECT, AUTH]:
+                self._packet['id'] = stream.get_int()
+            self._packet['code'] = stream.get_byte()
+            packed_properties = stream.get_properties()
+            self._packet['properties'] = properties.unpack(packed_properties, packet_type)
+
+
+        if qos not in range(2):
+            raise MalformedPacketException("Bad QoS")
+        self._packet['dup'] = dup
+        self._packet['qos'] = qos
+        self._packet['retain'] = retain
+        self._packet['topic'] = stream.get_string()
+        if qos > 0:
+            self._packet['id'] = stream.get_int()
+        packed_properties = stream.get_properties()
+        self._packet['properties'] = properties.unpack(packed_properties, PUBLISH)
+        self._packet['payload'] = stream.dump()
+
+
+    def read_connect_packet(self, stream):
+        self._packet['protocol_name'] = stream.get_string()
+        self._packet['protocol_version'] = stream.get_byte()
+
+        username_flag, password_flag, retain, qos, 
+         will_flag, clean_start, reserved = stream.get_connect_flags()
+        if reserved:
+            raise MalformedPacketException("Byte 0 reserved")
+
+        if will_flag:
+            if qos not in range(2):
+                raise MalformedPacketException("Bad QoS")
+        else:
+            if retain or qos != 0:
+                raise MalformedPacketException("Bytes 3-5 reserved")
+
+        self._packet['keep_alive'] = stream.get_int()
+
+        packed_properties = stream.get_properties()
+        self._packet['properties'] = properties.unpack(packed_properties, CONNECT)
+
+        self._packet['client_id'] = stream.get_string()
+        if will_flag:
+            packed_properties = stream.get_properties()
+            will_properties = properties.unpack(packed_properties, WILL)
+            topic = stream.get_string()
+            payload = self.get_binary()
+            self._packet['will'] = {
+                'qos': qos,
+                'retain': retain,
+                'topic': topic,
+                'payload': payload,
+                'properties': will_properties
+            }
+        if username_flag:
+            self._packet['username'] = stream.get_string()
+        if password_flag:
+            self._packet['password'] = stream.get_binary()
+
     def read(self, data):
         self._buffer += data
         is_finished = False

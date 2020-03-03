@@ -12,32 +12,23 @@ class Selector(selectors.DefaultSelector()):
         socket.setblocking(False)
         self.register(socket, selectors.EVENT_READ, data=None)
 
-    def register_client(self, socket, message, mask):
+    def register_client(self, socket, stream, mask):
         try:
             self.get_key(socket)
-            self.modify(socket, mask, data=message)
+            self.modify(socket, mask, data=stream)
         except KeyError as e:
             socket.setblocking(False)
-            self.register(socket, mask, data=message)
+            self.register(socket, mask, data=stream)
 
-    def register_read(self, socket, message):
-        self.register_client(socket, message, selectors.EVENT_READ)
+    def register_read(self, socket, stream):
+        self.register_client(socket, stream, selectors.EVENT_READ)
 
-    def register_write(self, socket, message):
-        self.register_client(socket, message, selectors.EVENT_WRITE)
+    def register_write(self, socket, stream):
+        self.register_client(socket, stream, selectors.EVENT_WRITE)
 
-    def register_new_message(self, socket):
-        message = self.protocol.create(socket.fileno(), socket.getpeername())
-        self.register_read(socket, message)
-
-    def register_from_action(self, socket, message, action):
-        if action == 'wait':
-            self.unregister(socket)
-        elif action == 'write':
-            self.register_write(socket, message)
-        else:
-            self.register_new_message(socket)
-
+    def register_new(self, socket):
+        stream = self.protocol.create_stream()
+        self.register_read(socket, stream)
 
 def start_listening(host, protocol, request_queue, response_queue):
 
@@ -47,7 +38,6 @@ def start_listening(host, protocol, request_queue, response_queue):
         listener.listen()
 
         with Selector(protocol) as selector:
-
             selector.register_listener(listener)
             connections = {}  
 
@@ -59,83 +49,78 @@ def start_listening(host, protocol, request_queue, response_queue):
                         if key.data is None:
                             client, addr = listener.accept()
                             connections[client.fileno()] = client
-                            selector.register_new_message(client)
+                            selector.register_new(client)
 
                         else:
                             client = key.fileobj
-                            message = key.data
+                            stream = key.data # message = key.data
 
                             if mask is selectors.EVENT_READ:
-                                finished = read(client, message)
-                                if finished:
-                                    action = message.action()
-                                    try:
-                                        selector.register_from_action(client, message, action)
-                                    except Exception as e:
-                                        print(
-                                            f"error: selector.unregister() exception for",
-                                            f"{client.getpeername()}: {repr(e)}",
-                                        )  
-                                    if action == 'wait':
-                                        request_queue.put(message.request)
+                                read(client, stream)
+                                if stream.is_loading():
+                                    continue
+
+                                unregister(selector, client, close=False)
+
+                                message = protocol.create_message()
+                                message.read(stream)
+
+                                action = message.get_action()
+                                if action == 'wait':
+                                    request = message.get_request()
+                                    request['fd'] = client.fileno()
+                                    request_queue.put(request)
+                                elif action in ['write', 'disconnect']:
+                                    stream = protocol.create_stream()
+                                    message.write(stream)
+                                    self.register_write(client, stream)
+                                    if action == 'disconnect':
+                                        del connections[client.fileno()]
+                                else:
+                                    self.register_new(client)
 
                             elif mask is selectors.EVENT_WRITE:
-                                finished = write(client, message)
-                                if finished:
-                                    try:
-                                        if message.disconnect:
-                                            selector.unregister(client)
-                                            del connections[client.fileno()]
-                                            client.close()
-                                        else:
-                                            selector.register_new_message(client)
-                                    except OSError as e:
-                                        print(
-                                            f"error: socket.close() exception for",
-                                            f"{client.getpeername()}: {repr(e)}",
-                                        )
-                                    except Exception as e:
-                                        print(
-                                            f"error: selector.unregister() exception for",
-                                            f"{client.getpeername()}: {repr(e)}",
-                                        ) 
+                                write(client, stream) # finished = write(client, message)
+                                if not stream.empty():
+                                    continue
+
+                                if not connections.has_key(client.fileno()):
+                                    unregister(selector, client)
+                                else:
+                                    selector.register_new(client)
 
                     if not response_queue.empty():
                         response = response_queue.get()
-                        message = protocol.create(response)
-                        if connections.has_key[message.fd]:
-                            client = connections[message.fd]
-                            message.create_response()
-                            action = message.action()
-                            try:
-                                selector.register_from_action(client, message, action)
-                            except Exception as e:
-                                print(
-                                    f"error: selector.unregister() exception for",
-                                    f"{client.getpeername()}: {repr(e)}",
-                                )  
-                            if action == 'wait':
-                                request_queue.put(message.request)
+
+                        fd = response['fd']
+                        if not connections.has_key[fd]:
+                            continue
+                        client = connections[fd]
+
+                        message = protocol.create_message()
+                        message.load_response(response)
+
+                        action = message.get_action()
+                        if action == 'wait':
+                            request = message.get_request()
+                            request['fd'] = client.fileno()
+                            request_queue.put(request)
+                        elif action in ['write', 'disconnect']:
+                            stream = protocol.create_stream()
+                            message.write(stream)
+                            self.register_write(client, stream)
+                            if action == 'disconnect':
+                                del connections[client.fileno()]
+                        else:
+                            self.register_new(client)
 
             except KeyboardInterrupt:
                 print("caught keyboard interrupt, exiting")
             finally:
                 for fd, client in connections:
-                    try:
-                        selector.unregister(client)
-                        client.close()
-                    except OSError as e:
-                        print(
-                            f"error: socket.close() exception for",
-                            f"{client.getpeername()}: {repr(e)}",
-                        )
-                    except Exception as e:
-                        print(
-                            f"error: selector.unregister() exception for",
-                            f"{client.getpeername()}: {repr(e)}",
-                        )
+                    unregister(selector, client)
 
-def read(socket, message):
+def read(socket, stream):
     try:
         # Should be ready to read
         data = socket.recv(4096)
@@ -144,18 +129,32 @@ def read(socket, message):
         pass
     else:
         if data:
-            message.read(data)
+            stream.load(data)
         else:
             raise RuntimeError("Peer closed.")
 
-def write(socket, message):
-    data = message.get_buffer()
-    if data:
-        try:
-            # Should be ready to write
-            sent = sock.send(buf)
-        except BlockingIOError:
-            # Resource temporarily unavailable (errno EWOULDBLOCK)
-            pass
-        else:
-            message.update_buffer(sent)
+def write(socket, stream):
+    try:
+        # Should be ready to write
+        sent = socket.send(stream.output(4096), 4096)
+    except BlockingIOError:
+        # Resource temporarily unavailable (errno EWOULDBLOCK)
+        pass
+    else:
+        stream.update(sent)
+
+def unregister(selector, socket, close=True):
+    try:
+        selector.unregister(socket)
+        if close:
+            socket.close()
+    except OSError as e:
+        print(
+            f"error: socket.close() exception for",
+            f"{socket.getpeername()}: {repr(e)}",
+        )
+    except Exception as e:
+        print(
+            f"error: selector.unregister() exception for",
+            f"{socket.getpeername()}: {repr(e)}",
+        )

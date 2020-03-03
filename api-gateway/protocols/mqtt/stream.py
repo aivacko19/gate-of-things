@@ -34,15 +34,21 @@ class MQTTStream():
             raise Exception('More than one packet')
 
         if len(self.buffer) == self.size:
-        	self.size = None
-        	self.stream = datatypes.encode_byte(self.header) + self.stream
+        	self.stream = datatypes.encode_byte(self.header) +
+        	 datatypes.encode_variable_byte_int(self.size) + self.stream
         	self.header = None
+        	self.size = None
         	self.loading = False
 
     def dump(self):
     	buf = self.buffer
     	self.buffer = b""
     	return buf
+
+    def append(self, value):
+    	if type(value) is not bytes:
+    		raise Exception("Parameter is not a byte string")
+    	self.buffer += value
 
     def get_byte(self):
     	value, index = datatypes.decode_byte(self.buffer)
@@ -105,7 +111,16 @@ class MQTTStream():
    		reserved = flags & 0xFE
    		return session_present, reserved
 
-   	def get_properties(self):
+    def get_sub_flags(self):
+    	flags = self.get_byte()
+    	max_qos = flags & 0x03
+        no_local = flags & 0x04 != 0
+        retain_as_published = flags & 0x08 != 0
+        retain_handling = (flags >> 4) & 0x03
+        reserved =  flags & 0xC0
+        return retain_handling, retain_as_published, no_local, max_qos, reserved
+
+   	def get_properties(self, packet_type):
    		props = list()
    		length = self.get_var_int()
         while length > 0:
@@ -121,7 +136,7 @@ class MQTTStream():
             	raise PropertiesException('Wrong Property Length')
             length -= index
             props.append((code, value))
-        return props
+        return properties.unpack(props, packet_type)
 
     def put_byte(self, value):
     	self.buffer += datatypes.encode_byte(value)
@@ -159,7 +174,11 @@ class MQTTStream():
             byte |= 0x08
         if retain:
             byte |= 0x01
+
+        content = self.dump()
         self.put_byte(byte)
+        self.put_var_int(len(content))
+        self.append(content)
 
     def put_connect_flags(self, username_flag, password_flag,
      will_retain, will_qos, will_flag, clean_start):
@@ -196,9 +215,27 @@ class MQTTStream():
     		byte |= 0x01
     	self.put_byte(byte)
 
+    def put_sub_flags(self, retain_handling, retain_as_published, no_local, max_qos):
+    	if not isinstance(max_qos, (int, long)):
+    		raise Exception("Max QoS is not a number")
+    	if not isinstance(retain_handling, (int, long)):
+    		raise Exception("Retain Handling is not a number")
+    	if type(retain_as_published) is not bool:
+    		raise Exception("Retain as Published flag is not a boolean")
+    	if type(no_local) is not bool:
+    		raise Exception("No local flag is not a boolean")
+    	byte =  max_qos
+    	byte |= retain_handling << 4
+    	if no_local:
+    		byte |= 0x04
+    	if retain_as_published:
+    		byte |= 0x08
+    	self.put_byte(byte)
+
     def put_properties(self, props):
-    	if type(props) is not list:
-    		raise PropertiesException("Parameter for properties is not a list")
+    	if type(props) is not dict:
+    		raise PropertiesException("Parameter for properties is not a dictionary")
+    	props = properties.pack(props)
     	stream = b""
     	for prop in props:
     		if type(prop) is not tuple or len(prop) < 2:

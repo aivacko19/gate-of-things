@@ -10,10 +10,10 @@ import threading
 import logging
 import json
 
-import gateway
+from gateway import Gateway
 import requester
 import receiver
-from properties.mqtt.message import MessageFactory
+from properties.mqtt.protocol import Protocol
 
 RABBITMQ_HOSTNAME = 'localhost'
 MY_HOSTNAME = 'localhost'
@@ -21,8 +21,6 @@ RECEIVER_NAME = 'gateway_receive'
 SERVICE_NAMES = {
     'connect': 'connect_service'
 }
-
-protocol = MessageFactory()
 
 with pika.BlockingConnection(pika.ConnectionParameters(RABBIT_MQ_HOST)) as connection
     request_queue = queue.Queue()
@@ -41,8 +39,10 @@ with pika.BlockingConnection(pika.ConnectionParameters(RABBIT_MQ_HOST)) as conne
     request_thread.start()
     receive_thread.start()
 
-    gateway.start_listening(MY_HOSTNAME, protocol, request_queue, receive_queue)
 
+    gateway = Gateway(MY_HOSTNAME, Protocol(), request_queue, receive_queue)
+    gateway.start_listening()
+    gateway.close()
 
 
 # if len(sys.argv) != 3:

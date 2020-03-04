@@ -1,26 +1,14 @@
 import logging
-
-RESERVED = 0
-CONNECT = 1
-CONNACK = 2
-PUBLISH = 3
-PUBACK = 4
-PUBREC = 5
-PUBREL = 6
-PUBCOMP = 7
-SUBSCRIBE = 8
-SUBACK = 9
-UNSUBSCRIBE = 10
-UNSUBACK = 11
-PINGREQ = 12
-PINGRESP = 13
-DISCONNECT = 14
-AUTH = 15
-WILL = 16
+from .const import *
 
 class MalformedPacketException(Exception):
     def __init__(self, message):
         super().__init__(message)
+
+class PropertiesException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
 
 def read(stream):
     packet = {}
@@ -54,7 +42,7 @@ def read(stream):
             if packet_type in [PUBACK, PUBREC, PUBREL, PUBCOMP]:
                 packet['id'] = stream.get_int()
             packet['code'] = stream.get_byte()
-            packet['properties'] = stream.get_properties(packet['type'])
+            packet['properties'] = get_properties(stream, packet['type'])
     except Exception as e:
         logging.error(repr(e))
         packet = {'type': 0}
@@ -64,12 +52,12 @@ def read_pub_packet(packet, stream):
     packet['topic'] = stream.get_string()
     if qos > 0:
         packet['id'] = stream.get_int()
-    packet['properties'] = stream.get_properties(packet['type'])
+    packet['properties'] = get_properties(stream, packet['type'])
     packet['payload'] = stream.dump()
 
 def read_sub_packet(packet, stream):
     packet['id'] = stream.get_int()
-    packet['properties'] = stream.get_properties(packet['type'])
+    packet['properties'] = get_properties(stream, packet['type'])
     packet['topics'] = list()
     while not stream.empty():
         topic = {}
@@ -106,10 +94,10 @@ def read_connect_packet(packet, stream):
         if retain or qos != 0:
             raise MalformedPacketException("Bytes 3-5 reserved")
     packet['keep_alive'] = stream.get_int()
-    packet['properties'] = stream.get_properties(packet['type'])
+    packet['properties'] = get_properties(stream, packet['type'])
     packet['client_id'] = stream.get_string()
     if will_flag:
-        packet['properties'] = stream.get_properties(WILL)
+        packet['properties'] = get_properties(stream, WILL)
         topic = stream.get_string()
         payload = stream.get_binary()
         packet['will'] = {
@@ -143,19 +131,19 @@ def write(packet, stream):
         if packet_type in [PUBACK, PUBREC, PUBREL, PUBCOMP]:
             stream.put_int(packet['id'])
         stream.put_byte(packet["code"])
-        stream.put_properties(packet["properties"])
+        put_properties(stream, packet["properties"])
     stream.put_header(packet_type)
 
 def write_pub_packet(packet, stream):
     stream.put_string(packet['topic'])
     if packet['qos'] > 0:
         stream.put_int(packet['id'])
-    stream.put_properties(packet["properties"])
+    put_properties(stream, packet["properties"])
     stream.append(packet["payload"])
 
 def write_sub_packet(packet, stream):
     stream.put_int(packet['id'])
-    stream.put_properties(packet["properties"])
+    put_properties(stream, packet["properties"])
     for topic in packet['topics']:
         if packet['type'] in [SUBSCRIBE, UNSUBSCRIBE]:
             stream.put_string(topic['filter'])
@@ -182,13 +170,68 @@ def write_connect_packet(packet, stream):
     stream.put_connack_flags(username_flag, password_flag, 
         will_retain, will_qos, will_flag, clean_start)
     stream.put_int(packet['keep_alive'])
-    stream.put_properties(packet["properties"])
+    put_properties(stream, packet["properties"])
     stream.put_string(packet['client_id'])
     if will_flag:
-        stream.put_properties(packet["will"]["properties"])
+        put_properties(stream, packet["will"]["properties"])
         stream.put_string(packet["will"]["topic"])
         stream.put_binary(packet["will"]["payload"])
     if username_flag:
         stream.put_string(packet['username'])
     if password_flag:
         stream.put_binary(packet['password'])
+
+def get_properties(stream, packet_type):
+    packed_properties = stream.get_properties()
+    properties = {}
+    for prop in packed_properties:
+        code, value = prop[0], prop[1]
+
+        if not properties_dictionary.has_key(code):
+            raise PropertiesException(f"Wrong property code {code}")
+        features = properties_dictionary[code]
+
+        if packet_type not in features['group']:
+            raise PropertiesException(f"Packet type ({packet_type})" +
+                f" does not support property ({features['name']})")
+        if features['bool'] and value not in range(1):
+            raise PropertiesException(f"Value other than 0 or 1" + 
+                f" for property ({features['name']}) not allowed")
+        if features['nonzero'] and value == 0:
+            raise PropertiesException(f"Value 0 " + 
+                f"for property ({features['name']}) not allowed")
+
+        if features['list']:
+            if not properties.has_key(features['name']):
+                properties[features['name']] = list()
+            properties[features['name']].append(value)
+        else:
+            if properties.has_key(features['name']):
+                raise PropertiesException(f"Property ({features['name']})" +
+                    f" can't be included more than once")
+            properties[features['name']] = value
+    if properties.has_key(properties_dictionary[AUTHENTICATION_DATA]['name']):
+        if not properties.has_key(properties_dictionary[AUTHENTICATION_METHOD]['name']):
+            raise PropertiesException("Missing property authentication_method" +
+            " for property authentication_data")
+    return properties
+
+def put_properties(stream, unpacked_properties):
+    properties = list()
+    for key, value in unpacked_properties:
+        features = None
+        code = 0
+        for mcode, mfeatures in properties_dictionary:
+            if mfeatures['name'] == key:
+                code = mcode
+                features = mfeatures
+                break
+        if features is None:
+            raise PropertiesException(f"Unexisting property ({key})")
+
+        if features['list']:
+            for element in value:
+                properties.append((code, element))
+        else:
+            properties.append((code, value))
+    stream.put_properties(properties)

@@ -13,7 +13,7 @@ import json
 from gateway import Gateway
 import requester
 import receiver
-from protocols.mqtt.protocol import Protocol
+from protocols import mqtt as protocol
 
 RABBITMQ_HOSTNAME = 'localhost'
 MY_HOSTNAME = 'localhost'
@@ -38,7 +38,7 @@ receive_thread = threading.Thread(
 request_thread.start()
 receive_thread.start()
 
-gateway = Gateway(MY_HOSTNAME, Protocol(), request_queue, receive_queue)
+gateway = Gateway(MY_HOSTNAME, protocol, request_queue, receive_queue)
 gateway.start_listening()
 gateway.close()
 

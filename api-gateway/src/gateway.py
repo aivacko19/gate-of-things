@@ -40,13 +40,12 @@ class Gateway():
             self.selector.register(socket, mask, data=stream)
 
     def register_read(self, socket):
-        stream = self.protocol.create_stream()
-        self.register_client(socket, stream, selectors.EVENT_READ)
+        stream = self.protocol.Stream()
+        self.register_client(socket, selectors.EVENT_READ)
 
     def register_write(self, socket, packet):
-        stream = protocol.create_stream()
-        self.protocol.write(packet, stream)
-        self.register_client(socket, stream, selectors.EVENT_WRITE)
+        stream = self.protocol.compose(packet)
+        self.register_client(socket, selectors.EVENT_WRITE)
 
     def unregister(self, socket, close=True):
         try:
@@ -86,7 +85,7 @@ class Gateway():
     def start_listening(self):
         self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.listener.bind((self.host, self.protocol.get_port()))
+        self.listener.bind((self.host, self.protocol.port))
         self.listener.listen()
         self.selector = selectors.DefaultSelector()
         self.register_listener()
@@ -112,7 +111,7 @@ class Gateway():
 
                             self.unregister(client, close=False)
 
-                            packet = self.protocol.read(stream)
+                            packet = self.protocol.parse(stream)
                             packet['addr'] = self.sock2addr(client)
                             self.request_queue.put(packet)
 

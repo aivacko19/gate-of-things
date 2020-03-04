@@ -1,10 +1,12 @@
 import logging
-from . import datatypes
-from . import properties
+import datatypes
+from .const import *
 
-from .properties import PropertiesException
+class PropertiesException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
 
-class MQTTStream():
+class Stream():
 	def __init__(self):
 		self.buffer = b""
 		self.header = None
@@ -121,23 +123,23 @@ class MQTTStream():
 		reserved =  flags & 0xC0
 		return retain_handling, retain_as_published, no_local, max_qos, reserved
 
-		def get_properties(self, packet_type):
-			props = list()
-			length = self.get_var_int()
+	def get_properties(self):
+		props = list()
+		length = self.get_var_int()
 		while length > 0:
 			code, code_index = datatypes.decode_variable_byte_int(self.buffer)
 			self.buffer = self.buffer[code_index:]
-			if not properties.dictionary.has_key(code):
+			if not properties_dictionary.has_key(code):
 				raise PropertiesException('Unexisting Property Code')
-			prop_type = dictionary[code]['type']
-			value, index = datatypes.decode(self.buffer, prop_type)
+			datatype = properties_dictionary[code]['type']
+			value, index = datatypes.decode(self.buffer, datatype)
 			self.buffer = self.buffer[index:]
 			index += code_index
 			if index > length:
 				raise PropertiesException('Wrong Property Length')
 			length -= index
 			props.append((code, value))
-		return properties.unpack(props, packet_type)
+		return props
 
 	def put_byte(self, value):
 		self.buffer += datatypes.encode_byte(value)
@@ -234,18 +236,18 @@ class MQTTStream():
 		self.put_byte(byte)
 
 	def put_properties(self, props):
-		if type(props) is not dict:
-			raise PropertiesException("Parameter for properties is not a dictionary")
-		props = properties.pack(props)
+		if type(props) is not list:
+			raise PropertiesException("Parameter for properties is not a list")
 		stream = b""
 		for prop in props:
 			if type(prop) is not tuple or len(prop) < 2:
 				raise PropertiesException("Parameter element is wrong type (2-sized tuple)")
 			code, value = prop[0], prop[1]
-			if not properties.dictionary.has_key(code):
+			if not properties_dictionary.has_key(code):
 				raise PropertiesException('Unexisting Property Code')
+			datatype = properties_dictionary[code]['type']
 			stream += datatypes.encode_byte(code)
-			stream += datatypes.encode(value, properties.dictionary[code]['type'])
+			stream += datatypes.encode(value, datatype)
 		length = datatypes.encode_variable_byte_int(len(stream))
 		self.buffer += length + stream
 

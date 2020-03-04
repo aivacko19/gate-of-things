@@ -1,6 +1,10 @@
-from . import datatypes
-from .datatypes import decode
-from .datatypes import encode
+BYTE = 0
+TWO_BYTE_INT = 1
+FOUR_BYTE_INT = 2
+UTF8_ENCODED_STRING = 3
+VARIABLE_BYTE_INT = 4
+BINARY_DATA = 5
+UTF8_STRING_PAIR = 5
 
 RESERVED = 0
 CONNECT = 1
@@ -82,13 +86,13 @@ user_prop_group = [CONNECT, CONNACK, PUBLISH, WILL, PUBACK,
     PUBREC, PUBREL, PUBCOMP, SUBSCRIBE, SUBACK,
     UNSUBSCRIBE, UNSUBACK, DISCONNECT, AUTH]
 
-dictionary = {
+properties_dictionary = {
     PAYLOAD_FORMAT_INDICATOR: {
         'list': False,
         'bool': False,
         'nonzero': False,
         'name': 'payload_format_indicator',
-        'type': datatypes.BYTE,
+        'type': BYTE,
         'group': pub_will_group
     },
     MESSAGE_EXPIRY_INTERVAL: {
@@ -96,7 +100,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'message_expiry_interval',
-        'type': datatypes.FOUR_BYTE_INT,
+        'type': FOUR_BYTE_INT,
         'group': pub_will_group
     },
     CONTENT_TYPE: {
@@ -104,7 +108,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'content_type',
-        'type': datatypes.UTF8_ENCODED_STRING,
+        'type': UTF8_ENCODED_STRING,
         'group': pub_will_group
     },
     RESPONSE_TOPIC: {
@@ -112,7 +116,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'response_topic',
-        'type': datatypes.UTF8_ENCODED_STRING,
+        'type': UTF8_ENCODED_STRING,
         'group': pub_will_group
     },
     CORRELATION_DATA: {
@@ -120,7 +124,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'correlation_data',
-        'type': datatypes.BINARY_DATA,
+        'type': BINARY_DATA,
         'group': pub_will_group
     },
     SUBSCRIPTION_IDENTIFIER: {
@@ -128,7 +132,7 @@ dictionary = {
         'bool': False,
         'nonzero': True,
         'name': 'subscription_identifier',
-        'type': datatypes.VARIABLE_BYTE_INT,
+        'type': VARIABLE_BYTE_INT,
         'group': pub_sub_group
     },
     SESSION_EXPIRY_INTERVAL: {
@@ -136,7 +140,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'session_expiry_interval',
-        'type': datatypes.FOUR_BYTE_INT,
+        'type': FOUR_BYTE_INT,
         'group': conn_connack_dis_group
     },
     ASSIGNED_CLIENT_IDENTIFIER: {
@@ -144,7 +148,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'assigned_client_identifier',
-        'type': datatypes.UTF8_ENCODED_STRING,
+        'type': UTF8_ENCODED_STRING,
         'group': connack_group
     },
     SERVER_KEEP_ALIVE: {
@@ -152,7 +156,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'server_keep_alive',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': connack_group
     },
     AUTHENTICATION_METHOD: {
@@ -160,7 +164,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'authentication_method',
-        'type': datatypes.UTF8_ENCODED_STRING,
+        'type': UTF8_ENCODED_STRING,
         'group': auth_group
     },
     AUTHENTICATION_DATA: {
@@ -168,7 +172,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'authentication_data',
-        'type': datatypes.BINARY_DATA,
+        'type': BINARY_DATA,
         'group': auth_group
     },
     REQUEST_PROBLEM_INFORMATION: {
@@ -176,7 +180,7 @@ dictionary = {
         'bool': True,
         'nonzero': False,
         'name': 'request_problem_information',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': conn_group
     },
     WILL_DELAY_INTERVAL: {
@@ -184,7 +188,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'will_delay_interval',
-        'type': datatypes.FOUR_BYTE_INT,
+        'type': FOUR_BYTE_INT,
         'group': will_group
     },
     REQUEST_RESPONSE_INFORMATION: {
@@ -192,7 +196,7 @@ dictionary = {
         'bool': True,
         'nonzero': False,
         'name': 'request_response_information',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': conn_group
     },
     RESPONSE_INFORMATION: {
@@ -200,7 +204,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'response_information',
-        'type': datatypes.UTF8_ENCODED_STRING,
+        'type': UTF8_ENCODED_STRING,
         'group': connack_group
     },
     SERVER_REFERENCE: {
@@ -208,7 +212,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'server_reference',
-        'type': datatypes.UTF8_ENCODED_STRING,
+        'type': UTF8_ENCODED_STRING,
         'group': connack_dis_group
     },
     REASON_STRING: {
@@ -216,7 +220,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'reason_string',
-        'type': datatypes.UTF8_ENCODED_STRING,
+        'type': UTF8_ENCODED_STRING,
         'group': reason_str_group
     },
     RECEIVE_MAXIMUM: {
@@ -224,7 +228,7 @@ dictionary = {
         'bool': False,
         'nonzero': True,
         'name': 'receive_maximum',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': conn_connack_group
     },
     TOPIC_ALIAS_MAXIMUM: {
@@ -232,7 +236,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'topic_alias_maximum',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': conn_connack_group
     },
     TOPIC_ALIAS: {
@@ -240,7 +244,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'topic_alias',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': pub_group
     },
     MAXIMUM_QOS: {
@@ -248,7 +252,7 @@ dictionary = {
         'bool': True,
         'nonzero': False,
         'name': 'maximum_qos',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': connack_group
     },
     RETAIN_AVAILABLE: {
@@ -256,7 +260,7 @@ dictionary = {
         'bool': True,
         'nonzero': False,
         'name': 'retain_available',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': connack_group
     },
     USER_PROPERTY: {
@@ -264,7 +268,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'user_property',
-        'type': datatypes.UTF8_STRING_PAIR,
+        'type': UTF8_STRING_PAIR,
         'group': user_prop_group
     },
     MAXIMUM_PACKET_SIZE: {
@@ -272,7 +276,7 @@ dictionary = {
         'bool': False,
         'nonzero': True,
         'name': 'maximum_packet_size',
-        'type': datatypes.FOUR_BYTE_INT,
+        'type': FOUR_BYTE_INT,
         'group': conn_connack_group
     },
     WILDCARD_SUBSCRIPTION_AVAILABLE: {
@@ -280,7 +284,7 @@ dictionary = {
         'bool': True,
         'nonzero': False,
         'name': 'wildcard_subscription_available',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': connack_group
     },
     SUBSCRIPTION_IDENTIFIER_AVAILABLE: {
@@ -288,7 +292,7 @@ dictionary = {
         'bool': True,
         'nonzero': False,
         'name': 'subscription_identifier_available',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': connack_group
     },
     SHARED_SUBSCRIPTION_AVAILABLE: {
@@ -296,66 +300,7 @@ dictionary = {
         'bool': True,
         'nonzero': False,
         'name': 'shared_subscription_available',
-        'type': datatypes.TWO_BYTE_INT,
+        'type': TWO_BYTE_INT,
         'group': connack_group
     }
 }
-
-class PropertiesException(Exception):
-    def __init__(self, message):
-        super().__init__(message)
-
-def unpack(packed_properties, packet_type):
-    properties = {}
-    for prop in packed_properties:
-        code, value = prop[0], prop[1]
-
-        if not dictionary.has_key(code):
-            raise PropertiesException(f"Wrong property code {code}")
-        features = dictionary[code]
-
-        if packet_type not in features['group']:
-            raise PropertiesException(f"Packet type ({packet_type})" +
-                f" does not support property ({features['name']})")
-        if features['bool'] and value not in range(1):
-            raise PropertiesException(f"Value other than 0 or 1" + 
-                f" for property ({features['name']}) not allowed")
-        if features['nonzero'] and value == 0:
-            raise PropertiesException(f"Value 0 " + 
-                f"for property ({features['name']}) not allowed")
-
-        if features['list']:
-            if not properties.has_key(features['name']):
-                properties[features['name']] = list()
-            properties[features['name']].append(value)
-        else:
-            if properties.has_key(features['name']):
-                raise PropertiesException(f"Property ({features['name']})" +
-                    f" can't be included more than once")
-            properties[features['name']] = value
-    if properties.has_key(dictionary[AUTHENTICATION_DATA]['name']):
-        if not properties.has_key(dictionary[AUTHENTICATION_METHOD]['name']):
-            raise PropertiesException("Missing property authentication_method" +
-            " for property authentication_data")
-    return properties
-
-def pack(unpacked_properties):
-    properties = list()
-    for key, value in unpacked_properties:
-        features = None
-        code = 0
-        for mcode, mfeatures in dictionary:
-            if mfeatures['name'] == key:
-                code = mcode
-                features = mfeatures
-                break
-        if features is None:
-            raise PropertiesException(f"Unexisting property ({key})")
-
-        if features['list']:
-            for element in value:
-                properties.append((code, element))
-        else:
-            properties.append((code, value))
-
-    return properties

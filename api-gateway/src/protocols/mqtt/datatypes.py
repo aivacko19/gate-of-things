@@ -1,14 +1,5 @@
 import struct
-
-BYTE = 0
-TWO_BYTE_INT = 1
-FOUR_BYTE_INT = 2
-UTF8_ENCODED_STRING = 3
-VARIABLE_BYTE_INT = 4
-BINARY_DATA = 5
-UTF8_STRING_PAIR = 5
-
-
+from .const import *
 
 class StreamLengthException(Exception):
     def __init__(self, message):

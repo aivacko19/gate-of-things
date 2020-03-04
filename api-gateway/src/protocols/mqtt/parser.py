@@ -9,6 +9,11 @@ class PropertiesException(Exception):
     def __init__(self, message):
         super().__init__(message)
 
+#==========================+++++++++++++++++==========================
+#                          +++++       +++++
+#                          +++++ PARSE +++++
+#                          +++++       +++++
+#==========================+++++++++++++++++==========================
 
 def read(stream):
     packet = {}
@@ -112,6 +117,47 @@ def read_connect_packet(packet, stream):
     if password_flag:
         packet['password'] = stream.get_binary()
 
+def get_properties(stream, packet_type):
+    packed_properties = stream.get_properties()
+    properties = {}
+    for prop in packed_properties:
+        code, value = prop[0], prop[1]
+
+        if not properties_dictionary.has_key(code):
+            raise PropertiesException(f"Wrong property code {code}")
+        features = properties_dictionary[code]
+
+        if packet_type not in features['group']:
+            raise PropertiesException(f"Packet type ({packet_type})" +
+                f" does not support property ({features['name']})")
+        if features['bool'] and value not in range(1):
+            raise PropertiesException(f"Value other than 0 or 1" + 
+                f" for property ({features['name']}) not allowed")
+        if features['nonzero'] and value == 0:
+            raise PropertiesException(f"Value 0 " + 
+                f"for property ({features['name']}) not allowed")
+
+        if features['list']:
+            if not properties.has_key(features['name']):
+                properties[features['name']] = list()
+            properties[features['name']].append(value)
+        else:
+            if properties.has_key(features['name']):
+                raise PropertiesException(f"Property ({features['name']})" +
+                    f" can't be included more than once")
+            properties[features['name']] = value
+    if properties.has_key(properties_dictionary[AUTHENTICATION_DATA]['name']):
+        if not properties.has_key(properties_dictionary[AUTHENTICATION_METHOD]['name']):
+            raise PropertiesException("Missing property authentication_method" +
+            " for property authentication_data")
+    return properties
+
+#==========================+++++++++++++++++++==========================
+#                          +++++         +++++
+#                          +++++ CONSUME +++++
+#                          +++++         +++++
+#==========================+++++++++++++++++++==========================
+
 def write(packet, stream):
     packet_type = packet['type']
 
@@ -181,41 +227,6 @@ def write_connect_packet(packet, stream):
     if password_flag:
         stream.put_binary(packet['password'])
 
-def get_properties(stream, packet_type):
-    packed_properties = stream.get_properties()
-    properties = {}
-    for prop in packed_properties:
-        code, value = prop[0], prop[1]
-
-        if not properties_dictionary.has_key(code):
-            raise PropertiesException(f"Wrong property code {code}")
-        features = properties_dictionary[code]
-
-        if packet_type not in features['group']:
-            raise PropertiesException(f"Packet type ({packet_type})" +
-                f" does not support property ({features['name']})")
-        if features['bool'] and value not in range(1):
-            raise PropertiesException(f"Value other than 0 or 1" + 
-                f" for property ({features['name']}) not allowed")
-        if features['nonzero'] and value == 0:
-            raise PropertiesException(f"Value 0 " + 
-                f"for property ({features['name']}) not allowed")
-
-        if features['list']:
-            if not properties.has_key(features['name']):
-                properties[features['name']] = list()
-            properties[features['name']].append(value)
-        else:
-            if properties.has_key(features['name']):
-                raise PropertiesException(f"Property ({features['name']})" +
-                    f" can't be included more than once")
-            properties[features['name']] = value
-    if properties.has_key(properties_dictionary[AUTHENTICATION_DATA]['name']):
-        if not properties.has_key(properties_dictionary[AUTHENTICATION_METHOD]['name']):
-            raise PropertiesException("Missing property authentication_method" +
-            " for property authentication_data")
-    return properties
-
 def put_properties(stream, unpacked_properties):
     properties = list()
     for key, value in unpacked_properties:
@@ -227,8 +238,7 @@ def put_properties(stream, unpacked_properties):
                 features = mfeatures
                 break
         if features is None:
-            raise PropertiesException(f"Unexisting property ({key})")
-
+            continue
         if features['list']:
             for element in value:
                 properties.append((code, element))

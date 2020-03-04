@@ -5,8 +5,12 @@ class StreamLengthException(Exception):
     def __init__(self, message):
         super().__init__(message)
 
-def check_bytes(stream):
-    if type(stream) is not bytes:
+def check_datatype(value):
+    if value not in range(6)
+        raise Exception('Parameter is not a valid data type (0-6)')
+
+def check_bytes(value):
+    if not isinstance(value, bytes):
         raise Exception('Parameter is not a byte string')
 
 def check_number(value):
@@ -14,17 +18,37 @@ def check_number(value):
         raise Exception("Parameter is not a number")
 
 def check_string(value):
-    if type(value) is not str:
+    if not isinstance(value, str):
         raise Exception("Parameter is not a string")
 
 def check_tuple(value):
-    if type(value) is not tuple:
-        raise Exception("Parameter is not a tuple")
+    if not isinstance(value, tuple) or len(value) < 2:
+        raise Exception("Parameter is not a 2-sized tuple")
+
+#==========================++++++++++++++++++==========================
+#                          +++++        +++++
+#                          +++++ DECODE +++++
+#                          +++++        +++++
+#==========================++++++++++++++++++==========================
 
 def decode(stream, data_type):
-    if not decode_map.has_key(data_type):
-        raise Exception('Unvalid data type')
-    return decode_map[data_type](stream)
+    check_datatype(data_type)
+    value, index = -1, -1
+    if data_type == const.BYTE:
+        value, index = decode_byte(stream)
+    elif data_type == const.TWO_BYTE_INT:
+        value, index = decode_two_byte_int(stream)
+    elif data_type == const.FOUR_BYTE_INT:
+        value, index = decode_four_byte_int(stream)
+    elif data_type == const.VARIABLE_BYTE_INT:
+        value, index = decode_variable_byte_int(stream)
+    elif data_type == const.BINARY_DATA:
+        value, index = decode_binary_data(stream)
+    elif data_type == const.UTF8_ENCODED_STRING:
+        value, index = decode_utf8_encoded_string(stream)
+    elif data_type == const.UTF8_STRING_PAIR:
+        value, index = decode_utf8_string_pair(stream)
+    return value, index
 
 def decode_byte(stream):
     check_bytes(stream)
@@ -80,10 +104,30 @@ def decode_utf8_string_pair(stream):
     value, index2 = decode_utf8_string_pair(stream[index1:])
     return (key, value), index1 + index2
 
+#==========================++++++++++++++++++==========================
+#                          +++++        +++++
+#                          +++++ ENCODE +++++
+#                          +++++        +++++
+#==========================++++++++++++++++++==========================
+
 def encode(value, data_type):
-    if not encode_map.has_key(data_type):
-        raise Exception('Unknown data type')
-    return encode_map[data_type](value)
+    check_datatype(data_type)
+    bstream = b""
+    if data_type == const.BYTE:
+        bstream = encode_byte(value)
+    elif data_type == const.TWO_BYTE_INT:
+        bstream = encode_two_byte_int(value)
+    elif data_type == const.FOUR_BYTE_INT:
+        bstream = encode_four_byte_int(value)
+    elif data_type == const.VARIABLE_BYTE_INT:
+        bstream = encode_variable_byte_int(value)
+    elif data_type == const.BINARY_DATA:
+        bstream = encode_binary_data(value)
+    elif data_type == const.UTF8_ENCODED_STRING:
+        bstream = encode_utf8_encoded_string(value)
+    elif data_type == const.UTF8_STRING_PAIR:
+        bstream = encode_utf8_string_pair(value)
+    return bstream
 
 def encode_byte(value):
     check_number(value)
@@ -102,7 +146,7 @@ def encode_variable_byte_int(value):
     stream = b""
     while value > 0 or len(stream) == 0:
         byte = value % 0x80
-        value = value / 0x80
+        value /= 0x80
         if value > 0:
             byte |= 0x80
         stream += encode_byte(byte)
@@ -119,28 +163,6 @@ def encode_utf8_encoded_string(value):
 
 def encode_utf8_string_pair(value):
     check_tuple(value)
-    if len(value) < 2:
-        raise Exception("Parameter tuple is shorter than 2")
     string1 = encode_utf8_string_pair(value[0])
     string2 = encode_utf8_string_pair(value[1])
     return string1 + string2
-
-decode_map = {
-    BYTE: decode_byte,
-    TWO_BYTE_INT: decode_two_byte_int,
-    FOUR_BYTE_INT: decode_four_byte_int,
-    UTF8_ENCODED_STRING: decode_utf8_encoded_string,
-    VARIABLE_BYTE_INT: decode_variable_byte_int,
-    BINARY_DATA: decode_binary_data,
-    UTF8_STRING_PAIR: decode_utf8_string_pair
-}
-
-encode_map = {
-    BYTE: encode_byte,
-    TWO_BYTE_INT: encode_two_byte_int,
-    FOUR_BYTE_INT: encode_four_byte_int,
-    UTF8_ENCODED_STRING: encode_utf8_encoded_string,
-    VARIABLE_BYTE_INT: encode_variable_byte_int,
-    BINARY_DATA: encode_binary_data,
-    UTF8_STRING_PAIR: encode_utf8_string_pair
-}

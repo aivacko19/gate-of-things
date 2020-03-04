@@ -3,23 +3,23 @@ import json
 import io
 import struct
 
-from stream import MQTTStream
-import parser
+from . import parser
+from . import stream
 
 class Protocol:
     def __init__(self):
         self.port = 1887
 
-    def get_port():
+    def get_port(self):
         return self.port
 
-    def create_stream():
-        return MQTTStream()
+    def create_stream(self):
+        return stream.MQTTStream()
 
-    def read(stream):
+    def read(self, stream):
         return parser.read(stream)
 
-    def write(packet, stream):
+    def write(self, packet, stream):
         parser.write(packet, stream)
 
 

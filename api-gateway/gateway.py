@@ -3,28 +3,6 @@
 import socket
 import selectors
 
-class Selector(selectors.DefaultSelector()):
-    def __init__(self):
-        super().__init__()
-
-    def register_listener(self, socket):
-        socket.setblocking(False)
-        self.register(socket, selectors.EVENT_READ, data=None)
-
-    def register_client(self, socket, stream, mask):
-        try:
-            self.get_key(socket)
-            self.modify(socket, mask, data=stream)
-        except KeyError as e:
-            socket.setblocking(False)
-            self.register(socket, mask, data=stream)
-
-    def register_read(self, socket, stream):
-        self.register_client(socket, stream, selectors.EVENT_READ)
-
-    def register_write(self, socket, stream):
-        self.register_client(socket, stream, selectors.EVENT_WRITE)
-
 class Gateway():
     def __init__(self, host, protocol, request_queue, response_queue):
         self.host = host
@@ -36,8 +14,8 @@ class Gateway():
         self.connections = {}
 
     def close(self):
-        if len(self.connections) > 0
-            for addr, client in self.connections:
+        if len(self.connections) > 0:
+            for client in self.connections.values():
                 self.unregister(client)
             self.connections = {}
         if self.selector is not None:
@@ -49,37 +27,49 @@ class Gateway():
             self.listener.close()
             self.listener = None
 
+    def register_listener(self):
+        self.listener.setblocking(False)
+        self.selector.register(self.listener, selectors.EVENT_READ, data=None)
+
+    def register_client(self, socket, stream, mask):
+        try:
+            self.selector.get_key(socket)
+            self.selector.modify(socket, mask, data=stream)
+        except KeyError as e:
+            socket.setblocking(False)
+            self.selector.register(socket, mask, data=stream)
+
     def register_read(self, socket):
         stream = self.protocol.create_stream()
-        self.selector.register_read(socket, stream)
+        self.register_client(socket, stream, selectors.EVENT_READ)
 
     def register_write(self, socket, packet):
         stream = protocol.create_stream()
         self.protocol.write(packet, stream)
-        self.selector.register_write(client, stream)
+        self.register_client(socket, stream, selectors.EVENT_WRITE)
 
     def unregister(self, socket, close=True):
-    try:
-        self.selector.unregister(socket)
-        if close:
-            socket.close()
-    except OSError as e:
-        print(
-            f"error: socket.close() exception for",
-            f"{socket.getpeername()}: {repr(e)}",
-        )
-    except Exception as e:
-        print(
-            f"error: selector.unregister() exception for",
-            f"{socket.getpeername()}: {repr(e)}",
-        )
+        try:
+            self.selector.unregister(socket)
+            if close:
+                socket.close()
+        except OSError as e:
+            print(
+                f"error: socket.close() exception for",
+                f"{socket.getpeername()}: {repr(e)}",
+            )
+        except Exception as e:
+            print(
+                f"error: selector.unregister() exception for",
+                f"{socket.getpeername()}: {repr(e)}",
+            )
 
     def get_socket(self, addr):
         return self.connections[addr]
 
     def put_socket(self, socket):
         addr = self.sock2addr(socket)
-        self.connections[addr] = client
+        self.connections[addr] = socket
 
     def socket_alive(self, addr):
         if type(addr) is not str:
@@ -93,13 +83,13 @@ class Gateway():
         pair = socket.getpeername()
         return f"{pair[0]}:{str(pair[1])}"
 
-    def start_listening():
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind((self.host, self.protocol.get_port()))
-        listener.listen()
-        selector = Selector()
-        selector.register_listener(listener)
+    def start_listening(self):
+        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.listener.bind((self.host, self.protocol.get_port()))
+        self.listener.listen()
+        self.selector = selectors.DefaultSelector()
+        self.register_listener()
 
         try:
             while True:
@@ -107,7 +97,7 @@ class Gateway():
                 for key, mask in events:
 
                     if key.data is None:
-                        client, addr = listener.accept()
+                        client, addr = self.listener.accept()
                         self.put_socket(client)
                         self.register_read(client)
 
@@ -183,7 +173,7 @@ def read(socket, stream):
 def write(socket, stream):
     try:
         # Should be ready to write
-        sent = socket.send(stream.output(4096), 4096)
+        sent = socket.send(stream.output(4096))
     except BlockingIOError:
         # Resource temporarily unavailable (errno EWOULDBLOCK)
         pass

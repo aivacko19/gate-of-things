@@ -1,6 +1,6 @@
-import datatypes
-from datatypes import decode
-from datatypes import encode
+from . import datatypes
+from .datatypes import decode
+from .datatypes import encode
 
 RESERVED = 0
 CONNECT = 1
@@ -15,7 +15,7 @@ SUBACK = 9
 UNSUBSCRIBE = 10
 UNSUBACK = 11
 PINGREQ = 12
-PINGRESP 13
+PINGRESP = 13
 DISCONNECT = 14
 AUTH = 15
 WILL = 16
@@ -79,7 +79,7 @@ auth_group = [CONNECT, CONNACK, AUTH]
 reason_str_group = [CONNACK, PUBACK, PUBREC, PUBREL, 
     PUBCOMP, SUBACK, UNSUBACK, DISCONNECT, AUTH]
 user_prop_group = [CONNECT, CONNACK, PUBLISH, WILL, PUBACK, 
-    PUBREC, PUBREL, PUBCOM, SUBSCRIBE, SUBACK,
+    PUBREC, PUBREL, PUBCOMP, SUBSCRIBE, SUBACK,
     UNSUBSCRIBE, UNSUBACK, DISCONNECT, AUTH]
 
 dictionary = {
@@ -140,8 +140,8 @@ dictionary = {
         'group': conn_connack_dis_group
     },
     ASSIGNED_CLIENT_IDENTIFIER: {
-        'list': False
-        'bool': False
+        'list': False,
+        'bool': False,
         'nonzero': False,
         'name': 'assigned_client_identifier',
         'type': datatypes.UTF8_ENCODED_STRING,
@@ -264,7 +264,7 @@ dictionary = {
         'bool': False,
         'nonzero': False,
         'name': 'user_property',
-        'type': UTF8_STRING_PAIR,
+        'type': datatypes.UTF8_STRING_PAIR,
         'group': user_prop_group
     },
     MAXIMUM_PACKET_SIZE: {
@@ -359,58 +359,3 @@ def pack(unpacked_properties):
             properties.append((code, value))
 
     return properties
-
-
-
-def decode_properties(stream, packet_type):
-    properties = {}
-    length, index = decode(stream, datatypes.VARIABLE_BYTE_INT)
-    stream = stream[index:]
-    index += length
-    if length != 0:
-        while length > 0:
-            prop_code, index = decode(stream, datatypes.VARIABLE_BYTE_INT)
-            stream = stream[index:]
-            length -= index
-            if not property_dict.has_key(prop_code):
-                raise Exception('Malformed Variable Byte Integer')
-            prop = property_dict[prop_code]
-            if packet_type not in prop['group']:
-                raise Exception('Malformed Variable Byte Integer')
-
-            if prop_code == USER_PROPERTY:
-                if not properties.has_key(prop_code):
-                    properties[USER_PROPERTY] = list()
-
-                pair, index = decode(stream, datatypes.UTF8_STRING_PAIR)
-                stream = stream[index:]
-                length -= index
-                properties[USER_PROPERTY].append(pair)
-            else:
-                if properties.has_key(prop_code):
-                    raise Exception('Malformed Variable Byte Integer')
-
-                data, index = decode(stream, prop['type'])
-                stream = stream[index:]
-                length -= index
-                properties[prop_code] = data
-    return properties, index
-
-def encode_properties(properties, packet_type):
-    stream = b""
-    for prop_code, value in properties:
-        if not property_dict.has_key(prop_code):
-            raise Exception('Malformed Variable Byte Integer')
-        prop = property_dict[prop_code]
-        if packet_type not in prop['group']:
-            raise Exception('Malformed Variable Byte Integer')
-        if prop_code == USER_PROPERTY:
-            for string_pair in value:
-                stream += encode(prop_code, datatypes.VARIABLE_BYTE_INT)
-                stream += encode(string_pair, datatypes.UTF8_STRING_PAIR)
-        else:
-            stream += encode(prop_code, datatypes.VARIABLE_BYTE_INT)
-            stream += encode(value, prop['type'])
-    length = encode(len(stream), datatypes.VARIABLE_BYTE_INT)
-    stream = length + stream
-    return stream

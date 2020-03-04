@@ -2,30 +2,27 @@
 
 import pika
 import json
-import libserver
+import bytescoder
 
 connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
 channel = connection.channel()
-channel.queue_declare(queue='microservice')
+channel.queue_declare(queue='connection_service')
 
 def callback(ch, method, properties, body):
+  body = body.decode('utf-8')
   print('Recieved:', body)
-  body = json.loads(body)
-  fd = body['fd']
-  addr = body['addr']
-  request = body['request']
-  jsonheader = body['jsonheader']
-  print('request:', request)
-  obj = libserver.Message(fd, addr)
-  obj.request = request
-  obj.jsonheader = jsonheader
-  obj.create_response()
-  body = {'fd': fd, 'addr': addr, 'response': obj.get_send_buffer().hex()}
-  body = json.dumps(body)
-  channel.basic_publish(exchange='', routing_key='api-gateway', body=body)
-  print(" [x] Sent 'Hello World!'")
+  packet = json.loads(body, object_hook=bytescoder.as_bytes)
 
-channel.basic_consume(queue='microservice', on_message_callback=callback, auto_ack=True)
+  addr = packet['addr']
+  print('Client:', addr)
+  response_queue_name = packet['response_queue_name']
+  packet = {'addr': addr, 'write': False, 'disconnect': True}
+
+  body = json.dumps(packet, cls=bytescoder.BytesEncoder).encode('utf-8')
+  channel.basic_publish(exchange='', routing_key=response_queue_name, body=body)
+  print(" [x] Sent back to queue", response_queue_name)
+
+channel.basic_consume(queue='connection_service', on_message_callback=callback, auto_ack=True)
 
 print(' [*] Waiting for messages. To exit press CTRL+C')
 channel.start_consuming()

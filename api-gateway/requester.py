@@ -8,23 +8,22 @@ import pika
 import queue
 import logging
 import json
+import bytescoder
 
-def request(connection, queue_names, request_queue):
+def request(hostname, queue_name, response_queue_name, request_queue):
 
+    connection = pika.BlockingConnection(pika.ConnectionParameters(hostname))
     channel = connection.channel()
-    for service, queue_name in queue_names:
-        channel.queue_declare(queue_name)
+    channel.queue_declare(queue_name)
 
     try:
         while True:
-            request = request_queue.get()
-            service = request['service']
-            queue_name = queue_names[service]
-
-            body = #encode request
+            packet = request_queue.get()
+            packet['response_queue_name'] = response_queue_name
+            body = json.dumps(packet, cls=bytescoder.BytesEncoder).encode('utf-8')
             channel.basic_publish(exchange='', routing_key=queue_name, body=body)
     except Exception as e:
-        logging.
+        logging.error(f"Exception while executing request loop: {e}")
 
 
 

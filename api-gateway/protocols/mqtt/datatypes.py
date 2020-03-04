@@ -1,26 +1,14 @@
 import struct
 
+BYTE = 0
+TWO_BYTE_INT = 1
+FOUR_BYTE_INT = 2
+UTF8_ENCODED_STRING = 3
+VARIABLE_BYTE_INT = 4
+BINARY_DATA = 5
+UTF8_STRING_PAIR = 5
 
 
-decode_map = {
-    BYTE: decode_byte,
-    TWO_BYTE_INT: decode_two_byte_int,
-    FOUR_BYTE_INT: decode_four_byte_int,
-    UTF8_ENCODED_STRING: decode_utf8_encoded_string,
-    VARIABLE_BYTE_INT: decode_variable_byte_int,
-    BINARY_DATA: decode_binary_data,
-    UTF8_STRING_PAIR: decode_utf8_string_pair
-}
-
-encode_map = {
-    BYTE: encode_byte,
-    TWO_BYTE_INT: encode_two_byte_int,
-    FOUR_BYTE_INT: encode_four_byte_int,
-    UTF8_ENCODED_STRING: encode_utf8_encoded_string,
-    VARIABLE_BYTE_INT: encode_variable_byte_int,
-    BINARY_DATA: encode_binary_data,
-    UTF8_STRING_PAIR: encode_utf8_string_pair
-}
 
 class StreamLengthException(Exception):
     def __init__(self, message):
@@ -31,7 +19,7 @@ def check_bytes(stream):
         raise Exception('Parameter is not a byte string')
 
 def check_number(value):
-    if not isinstance(value, (int, long)):
+    if not isinstance(value, int):
         raise Exception("Parameter is not a number")
 
 def check_string(value):
@@ -121,7 +109,7 @@ def encode_four_byte_int(value):
 def encode_variable_byte_int(value):
     check_number(value)
     stream = b""
-    while value > 0:
+    while value > 0 or len(stream) == 0:
         byte = value % 0x80
         value = value / 0x80
         if value > 0:
@@ -146,3 +134,22 @@ def encode_utf8_string_pair(value):
     string2 = encode_utf8_string_pair(value[1])
     return string1 + string2
 
+decode_map = {
+    BYTE: decode_byte,
+    TWO_BYTE_INT: decode_two_byte_int,
+    FOUR_BYTE_INT: decode_four_byte_int,
+    UTF8_ENCODED_STRING: decode_utf8_encoded_string,
+    VARIABLE_BYTE_INT: decode_variable_byte_int,
+    BINARY_DATA: decode_binary_data,
+    UTF8_STRING_PAIR: decode_utf8_string_pair
+}
+
+encode_map = {
+    BYTE: encode_byte,
+    TWO_BYTE_INT: encode_two_byte_int,
+    FOUR_BYTE_INT: encode_four_byte_int,
+    UTF8_ENCODED_STRING: encode_utf8_encoded_string,
+    VARIABLE_BYTE_INT: encode_variable_byte_int,
+    BINARY_DATA: encode_binary_data,
+    UTF8_STRING_PAIR: encode_utf8_string_pair
+}

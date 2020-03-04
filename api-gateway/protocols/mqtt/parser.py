@@ -1,3 +1,5 @@
+import logging
+
 RESERVED = 0
 CONNECT = 1
 CONNACK = 2
@@ -11,7 +13,7 @@ SUBACK = 9
 UNSUBSCRIBE = 10
 UNSUBACK = 11
 PINGREQ = 12
-PINGRESP 13
+PINGRESP = 13
 DISCONNECT = 14
 AUTH = 15
 WILL = 16
@@ -22,36 +24,40 @@ class MalformedPacketException(Exception):
 
 def read(stream):
     packet = {}
-    packet_type, dup, qos, retain = stream.get_header()
-    stream.get_var_int()
-    if packet_type == RESERVED:
-        raise MalformedPacketException("Bad packet type")
-    packet['type'] = packet_type
+    try:
+        packet_type, dup, qos, retain = stream.get_header()
+        stream.get_var_int()
+        if packet_type == RESERVED:
+            raise MalformedPacketException("Bad packet type")
+        packet['type'] = packet_type
 
-    if packet_type == PUBLISH:
-        if qos not in range(2):
-            raise MalformedPacketException("Bad QoS")
-        packet['dup'] = dup
-        packet['qos'] = qos
-        packet['retain'] = retain
-        read_pub_packet(stream)
-        return packet
+        if packet_type == PUBLISH:
+            if qos not in range(2):
+                raise MalformedPacketException("Bad QoS")
+            packet['dup'] = dup
+            packet['qos'] = qos
+            packet['retain'] = retain
+            read_pub_packet(stream)
+            return packet
 
-    if dup or retain or qos != 0:
-        raise MalformedPacketException("Bytes 0-3 reserved")
-    if packet_type in [SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK]:
-        read_sub_packet(stream)
-    elif packet_type == CONNECT:
-        read_connect_packet(stream)
-    elif packet_type not in [PINGREQ, PINGRESP]:
-        if packet_type == CONNACK:
-            packet['session_present'], reserved = stream.get_connack_flags()
-            if reserved != 0:
-                raise MalformedPacketException("Bytes 1-7 reserved")
-        if packet_type in [PUBACK, PUBREC, PUBREL, PUBCOMP]:
-            packet['id'] = stream.get_int()
-        packet['code'] = stream.get_byte()
-        packet['properties'] = stream.get_properties(packet['type'])
+        if dup or retain or qos != 0:
+            raise MalformedPacketException("Bytes 0-3 reserved")
+        if packet_type in [SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK]:
+            read_sub_packet(stream)
+        elif packet_type == CONNECT:
+            read_connect_packet(stream)
+        elif packet_type not in [PINGREQ, PINGRESP]:
+            if packet_type == CONNACK:
+                packet['session_present'], reserved = stream.get_connack_flags()
+                if reserved != 0:
+                    raise MalformedPacketException("Bytes 1-7 reserved")
+            if packet_type in [PUBACK, PUBREC, PUBREL, PUBCOMP]:
+                packet['id'] = stream.get_int()
+            packet['code'] = stream.get_byte()
+            packet['properties'] = stream.get_properties(packet['type'])
+    except Exception as e:
+        logging.error(repr(e))
+        packet = {'type': 0}
     return packet
 
 def read_pub_packet(packet, stream):
@@ -70,8 +76,8 @@ def read_sub_packet(packet, stream):
         if packet['type'] in [SUBSCRIBE, UNSUBSCRIBE]:
             topic['filter'] = stream.get_string()
         if packet['type'] == SUBSCRIBE:
-            retain_handling, retain_as_published, no_local, max_qos, reserved =
-                stream.get_pub_flags()
+            retain_handling, retain_as_published, \
+                no_local, max_qos, reserved = stream.get_pub_flags()
             if reserved != 0:
                 raise MalformedPacketException("Bytes 6-7 reserved")
             if max_qos not in range(2):
@@ -89,8 +95,8 @@ def read_sub_packet(packet, stream):
 def read_connect_packet(packet, stream):
     packet['protocol_name'] = stream.get_string()
     packet['protocol_version'] = stream.get_byte()
-    username_flag, password_flag, retain, qos, 
-     will_flag, clean_start, reserved = stream.get_connect_flags()
+    username_flag, password_flag, retain, qos, \
+        will_flag, clean_start, reserved = stream.get_connect_flags()
     if reserved:
         raise MalformedPacketException("Byte 0 reserved")
     if will_flag:

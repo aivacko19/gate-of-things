@@ -24,6 +24,10 @@ DISCONNECT = 14
 AUTH = 15
 WILL = 16
 
+UNSPECIFIED_ERROR = 0x80
+MALFORMED_PACKET = 0X81
+PROTOCOL_ERROR = 0X82
+
 SERVER_REFERENCE = 0X1C # Unique
 
 WILL_DELAY_INTERVAL = 0X18 # Unique
@@ -72,21 +76,19 @@ pub_group = [PUBLISH]
 will_group = [WILL]
 pub_will_group = [PUBLISH, WILL]
 pub_sub_group = [PUBLISH, SUBSCRIBE]
-
 conn_group = [CONNECT]
 connack_group = [CONNACK]
 conn_connack_group = [CONNECT, CONNACK]
 connack_dis_group = [CONNACK, DISCONNECT]
 conn_connack_dis_group = [CONNECT, CONNACK, DISCONNECT]
 auth_group = [CONNECT, CONNACK, AUTH]
-
 reason_str_group = [CONNACK, PUBACK, PUBREC, PUBREL, 
     PUBCOMP, SUBACK, UNSUBACK, DISCONNECT, AUTH]
 user_prop_group = [CONNECT, CONNACK, PUBLISH, WILL, PUBACK, 
     PUBREC, PUBREL, PUBCOMP, SUBSCRIBE, SUBACK,
     UNSUBSCRIBE, UNSUBACK, DISCONNECT, AUTH]
 
-properties_dictionary = {
+DICT = {
     PAYLOAD_FORMAT_INDICATOR: {
         'list': False,
         'bool': False,

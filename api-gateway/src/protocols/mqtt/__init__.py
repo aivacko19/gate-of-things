@@ -1,18 +1,33 @@
 import parser
-from stream import Stream
+from .stream import Stream
 
 port = 1887
 
-def create_stream():
-        return Stream()
+def new_stream():
+    return Stream()
 
 def parse(stream):
     return parser.read(stream)
 
 def compose(packet):
-	stream = Stream()
+    stream = Stream()
     parser.write(packet, stream)
     return stream
+
+def write(stream, data):
+    stream.load(data)
+
+def peek(stream, size):
+    return stream.output(size)
+
+def position(stream, position):
+    stream.update(position)
+
+def busy(stream):
+    return stream.is_loading()
+
+def empty(stream):
+    return stream.empty()
 
 # def _json_encode(self, obj, encoding):
 #     return json.dumps(obj, ensure_ascii=False).encode(encoding)

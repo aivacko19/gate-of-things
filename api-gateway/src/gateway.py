@@ -9,6 +9,7 @@ class Gateway():
         self.protocol = protocol
         self.request_queue = request_queue
         self.response_queue = response_queue
+        self.stop_flag = False
         self.listener = None
         self.selector = None
         self.connections = {}
@@ -40,18 +41,23 @@ class Gateway():
             self.selector.register(socket, mask, data=stream)
 
     def register_read(self, socket):
-        stream = self.protocol.Stream()
-        self.register_client(socket, selectors.EVENT_READ)
+        stream = self.protocol.new_stream()
+        self.register_client(socket, stream, selectors.EVENT_READ)
 
     def register_write(self, socket, packet):
         stream = self.protocol.compose(packet)
-        self.register_client(socket, selectors.EVENT_WRITE)
+        self.register_client(socket, stream, selectors.EVENT_WRITE)
 
     def unregister(self, socket, close=True):
         try:
-            self.selector.unregister(socket)
-            if close:
-                socket.close()
+            try:
+                self.selector.get_key(socket)
+                self.selector.unregister(socket)
+            except KeyError:
+                a = 2 + 3
+            finally:
+                if close:
+                    socket.close()
         except OSError as e:
             print(
                 f"error: socket.close() exception for",
@@ -71,11 +77,13 @@ class Gateway():
         self.connections[addr] = socket
 
     def socket_alive(self, addr):
-        if type(addr) is not str:
+        if not isinstance(addr, str):
             addr = self.sock2addr(addr)
-        return self.connections.has_key(addr)
+        return addr in self.connections
 
     def kill_socket(self, addr):
+        if not isinstance(addr, str):
+            addr = self.sock2addr(addr)
         del self.connections[addr]
 
     def sock2addr(self, socket):
@@ -105,8 +113,15 @@ class Gateway():
                         stream = key.data
 
                         if mask is selectors.EVENT_READ:
-                            read(client, stream)
-                            if stream.is_loading():
+                            try:
+                                self.read(client, stream)
+                            except RuntimeError:
+                                packet = {'addr': self.sock2addr(client),
+                                          'disconnect': True}
+                                self.request_queue.put(packet)
+                                self.kill_socket(client)
+                                self.unregister(client)
+                            if self.protocol.busy(stream) or self.protocol.empty(stream):
                                 continue
 
                             self.unregister(client, close=False)
@@ -116,8 +131,8 @@ class Gateway():
                             self.request_queue.put(packet)
 
                         elif mask is selectors.EVENT_WRITE:
-                            write(client, stream)
-                            if not stream.empty():
+                            self.write(client, stream)
+                            if not self.protocol.empty(stream):
                                 continue
 
                             if not self.socket_alive(client):
@@ -127,17 +142,17 @@ class Gateway():
 
                 if not self.response_queue.empty():
                     packet = self.response_queue.get()
-                    disconnect_flag = packet.has_key['disconnect']
+                    disconnect_flag = 'disconnect' in packet
                     if disconnect_flag:
                         disconnect_flag = packet['disconnect']
-                    write_flag = packet.has_key['write']
+                    write_flag = 'write' in packet
                     if write_flag:
                         write_flag = packet['write']
 
                     addr = packet['addr']
                     if not self.socket_alive(addr):
                         if not disconnect_flag:
-                            packet = {'type': 0, 'addr': addr}
+                            packet = {'disconnect': True}
                             self.request_queue.put(packet)
                         continue
                     client = self.get_socket(addr)
@@ -145,36 +160,46 @@ class Gateway():
                         self.kill_socket(addr)
 
                     if write_flag:
+                        del packet['addr']
+                        del packet['write']
+                        if 'disconnect' in packet:
+                            del packet['disconnect']
                         self.register_write(client, packet)
                     elif not disconnect_flag:
                         self.register_read(client)
                     else:
-                        self.unregister(selector, client)
+                        self.unregister(client)
+                if self.stop_flag:
+                    break
 
         except KeyboardInterrupt:
             print("caught keyboard interrupt, exiting")
         finally:
             self.close()
 
-def read(socket, stream):
-    try:
-        # Should be ready to read
-        data = socket.recv(4096)
-    except BlockingIOError:
-        # Resource temporarily unavailable (errno EWOULDBLOCK)
-        pass
-    else:
-        if data:
-            stream.load(data)
+    def read(self, socket, stream):
+        try:
+            # Should be ready to read
+            data = socket.recv(4096)
+        except BlockingIOError:
+            # Resource temporarily unavailable (errno EWOULDBLOCK)
+            pass
         else:
-            raise RuntimeError("Peer closed.")
+            if data:
+                self.protocol.write(stream, data)
+            else:
+                raise RuntimeError("Peer closed.")
 
-def write(socket, stream):
-    try:
-        # Should be ready to write
-        sent = socket.send(stream.output(4096))
-    except BlockingIOError:
-        # Resource temporarily unavailable (errno EWOULDBLOCK)
-        pass
-    else:
-        stream.update(sent)
+    def write(self, socket, stream):
+        try:
+            # Should be ready to write
+            data = self.protocol.peek(stream, 4096)
+            sent = socket.send(data)
+        except BlockingIOError:
+            # Resource temporarily unavailable (errno EWOULDBLOCK)
+            pass
+        else:
+            self.protocol.position(stream, sent)
+
+    def stop(self):
+        self.stop_flag = True

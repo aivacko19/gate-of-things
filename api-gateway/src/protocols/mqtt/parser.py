@@ -1,5 +1,6 @@
 import logging
 from .const import *
+from . import stream as stream_module
 
 class MalformedPacketError(Exception):
     def __init__(self, message):
@@ -30,15 +31,15 @@ def read(stream):
             packet['dup'] = dup
             packet['qos'] = qos
             packet['retain'] = retain
-            read_pub_packet(stream)
+            read_pub_packet(packet, stream)
             return packet
 
         if dup or retain or qos != 0:
             raise MalformedPacketError("Bytes 0-3 reserved")
         if packet_type in [SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK]:
-            read_sub_packet(stream)
+            read_sub_packet(packet, stream)
         elif packet_type == CONNECT:
-            read_connect_packet(stream)
+            read_connect_packet(packet, stream)
         elif packet_type not in [PINGREQ, PINGRESP]:
             if packet_type == CONNACK:
                 packet['session_present'], reserved = stream.get_connack_flags()
@@ -49,9 +50,9 @@ def read(stream):
             packet['code'] = stream.get_byte()
             packet['properties'] = get_properties(stream, packet['type'])
     except (MalformedPacketError,
-            stream.PropertiesErrors,
-            stream.MalformedVariableIntegerError
-            stream.OutOfBoundsError) as e:
+            stream_module.PropertiesError,
+            stream_module.MalformedVariableIntegerError,
+            stream_module.OutOfBoundsError) as e:
         packet['error'] = MALFORMED_PACKET
         logging.error(repr(e))
     except ProtocolError as e: 
@@ -64,7 +65,7 @@ def read(stream):
 
 def read_pub_packet(packet, stream):
     packet['topic'] = stream.get_string()
-    if qos > 0:
+    if packet['qos'] > 0:
         packet['id'] = stream.get_int()
     packet['properties'] = get_properties(stream, packet['type'])
     packet['payload'] = stream.dump()
@@ -79,7 +80,7 @@ def read_sub_packet(packet, stream):
             topic['filter'] = stream.get_string()
         if packet['type'] == SUBSCRIBE:
             retain_handling, retain_as_published, \
-                no_local, max_qos, reserved = stream.get_pub_flags()
+                no_local, max_qos, reserved = stream.get_sub_flags()
             if reserved != 0:
                 raise MalformedPacketError("Bytes 6-7 reserved")
             if max_qos not in range(3):
@@ -107,11 +108,12 @@ def read_connect_packet(packet, stream):
     else:
         if retain or qos != 0:
             raise MalformedPacketError("Bytes 3-5 reserved")
+    packet['clean_start'] = clean_start
     packet['keep_alive'] = stream.get_int()
     packet['properties'] = get_properties(stream, packet['type'])
     packet['client_id'] = stream.get_string()
     if will_flag:
-        packet['properties'] = get_properties(stream, WILL)
+        will_properties = get_properties(stream, WILL)
         topic = stream.get_string()
         payload = stream.get_binary()
         packet['will'] = {
@@ -169,15 +171,15 @@ def write(packet, stream):
     packet_type = packet['type']
 
     if packet_type == PUBLISH:
-        write_pub_packet(stream)
+        write_pub_packet(packet, stream)
         stream.put_header(packet_type, 
             packet['dup'], packet['qos'], packet['retain'])
         return
 
     if packet_type in [SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK]:
-        write_sub_packet(stream)
+        write_sub_packet(packet, stream)
     elif packet_type == CONNECT:
-        write_connect_packet(stream)
+        write_connect_packet(packet, stream)
     elif packet_type not in [PINGREQ, PINGRESP]:
         if packet_type == CONNACK:
             stream.put_connack_flags(packet['session_present'])
@@ -201,11 +203,10 @@ def write_sub_packet(packet, stream):
         if packet['type'] in [SUBSCRIBE, UNSUBSCRIBE]:
             stream.put_string(topic['filter'])
         if packet['type'] == SUBSCRIBE:
-            stream.put_pub_flags(topic['retain_handling'], topic['retain_as_published'],
+            stream.put_sub_flags(topic['retain_handling'], topic['retain_as_published'],
                 topic['no_local'], topic['max_qos'])
         if packet["type"] in [SUBACK, UNSUBACK]:
             stream.put_byte(topic['code'])
-        packet['topics'].append(topic)
 
 def write_connect_packet(packet, stream):
     stream.put_string(packet['protocol_name'])
@@ -220,8 +221,8 @@ def write_connect_packet(packet, stream):
     clean_start = 'clean_start' in packet
     if clean_start:
         clean_start = packet['clean_start']
-    stream.put_connack_flags(username_flag, password_flag, 
-        will_retain, will_qos, will_flag, clean_start)
+    stream.put_connect_flags(username_flag, password_flag, 
+        retain, qos, will_flag, clean_start)
     stream.put_int(packet['keep_alive'])
     put_properties(stream, packet["properties"])
     stream.put_string(packet['client_id'])
@@ -236,10 +237,12 @@ def write_connect_packet(packet, stream):
 
 def put_properties(stream, unpacked_properties):
     properties = list()
-    for key, value in unpacked_properties:
+    for key in unpacked_properties:
+        value = unpacked_properties[key]
         features = None
         code = 0
-        for mcode, mfeatures in DICT:
+        for mcode in DICT:
+            mfeatures = DICT[mcode]
             if mfeatures['name'] == key:
                 code = mcode
                 features = mfeatures

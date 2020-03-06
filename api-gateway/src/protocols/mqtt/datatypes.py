@@ -77,8 +77,8 @@ def decode_utf8_encoded_string(stream):
     return value.decode("utf-8"), index
 
 def decode_utf8_string_pair(stream):
-    key, index1 = decode_utf8_string_pair(stream)
-    value, index2 = decode_utf8_string_pair(stream[index1:])
+    key, index1 = decode_utf8_encoded_string(stream)
+    value, index2 = decode_utf8_encoded_string(stream[index1:])
     if index1 < 0 or index2 < 0:
         return ("", ""), -1
     return (key, value), index1 + index2
@@ -104,9 +104,9 @@ def encode_four_byte_int(value):
 def encode_variable_byte_int(value):
     check_number(value)
     stream = b""
-    while value > 0 or len(stream) == 0:
+    while value > 0 or not stream:
         byte = value % 0x80
-        value /= 0x80
+        value = int(value / 0x80)
         if value > 0:
             byte |= 0x80
         stream += encode_byte(byte)
@@ -123,6 +123,6 @@ def encode_utf8_encoded_string(value):
 
 def encode_utf8_string_pair(value):
     check_tuple(value)
-    string1 = encode_utf8_string_pair(value[0])
-    string2 = encode_utf8_string_pair(value[1])
+    string1 = encode_utf8_encoded_string(value[0])
+    string2 = encode_utf8_encoded_string(value[1])
     return string1 + string2

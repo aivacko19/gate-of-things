@@ -47,7 +47,7 @@ class Stream():
             self.size = value
 
         if len(self.buffer) > self.size:
-            raise Exception('More than one packet')
+            raise OverflowError('More than one packet')
         if len(self.buffer) == self.size:
             self.buffer = (datatypes.encode_byte(self.header)
                            + datatypes.encode_variable_byte_int(self.size)
@@ -100,7 +100,7 @@ class Stream():
         if index < 0:
             raise OutOfBoundsError()
         if index > 4:
-            raise 
+            raise MalformedVariableIntegerError()
         self.buffer = self.buffer[index:]
         return value
 
@@ -127,7 +127,7 @@ class Stream():
 
     def get_header(self):
         header = self.get_byte()
-        packet_type = header >> 4
+        packet_type = header & 0xF0
         dup = header & 0x08 != 0
         qos = (header >> 1) & 0x03
         retain = header & 0x01 != 0
@@ -142,7 +142,7 @@ class Stream():
         reserved = flags & 0x01 != 0
         clean_start = flags & 0x02 != 0
         will_flag = flags & 0x04 != 0
-        will_qos = (header >> 3) & 0x03
+        will_qos = (flags >> 3) & 0x03
         will_retain = flags & 0x20 != 0
         password_flag = flags & 0x40 != 0
         username_flag = flags & 0x80 != 0
@@ -158,7 +158,7 @@ class Stream():
     def get_connack_flags(self):
         flags = self.get_byte()
         session_present = flags & 0x01 != 0
-        reserved = flags & 0xFE
+        reserved = flags & 0xFE != 0
         return (session_present,
                 reserved,
                 )
@@ -169,7 +169,7 @@ class Stream():
         no_local = flags & 0x04 != 0
         retain_as_published = flags & 0x08 != 0
         retain_handling = (flags >> 4) & 0x03
-        reserved =  flags & 0xC0
+        reserved =  flags & 0xC0 != 0
         return (retain_handling,
                 retain_as_published,
                 no_local,
@@ -181,35 +181,35 @@ class Stream():
         properties = list()
         length = self.get_var_int()
         while length > 0:
-            code, index = self.get_var_int(self.buffer)
+            code, index = datatypes.decode_variable_byte_int(self.buffer)
             if index > length:
-                raise PropertiesException('Malformed Properties Length')
+                raise PropertiesError('Malformed Properties Length')
             length -= index
             self.buffer = self.buffer[index:]
             if code not in const.DICT:
-                raise PropertiesException('Property not supported')
+                raise PropertiesError(f'Property not supported: {hex(code)}')
             data_type = const.DICT[code]['type']
             value, index = None, -1
             if data_type == const.BYTE:
-                value, index = datatypes.decode_byte(stream)
+                value, index = datatypes.decode_byte(self.buffer)
             elif data_type == const.TWO_BYTE_INT:
-                value, index = datatypes.decode_two_byte_int(stream)
+                value, index = datatypes.decode_two_byte_int(self.buffer)
             elif data_type == const.FOUR_BYTE_INT:
-                value, index = datatypes.decode_four_byte_int(stream)
+                value, index = datatypes.decode_four_byte_int(self.buffer)
             elif data_type == const.VARIABLE_BYTE_INT:
-                value, index = datatypes.decode_variable_byte_int(stream)
+                value, index = datatypes.decode_variable_byte_int(self.buffer)
             elif data_type == const.BINARY_DATA:
-                value, index = datatypes.decode_binary_data(stream)
+                value, index = datatypes.decode_binary_data(self.buffer)
             elif data_type == const.UTF8_ENCODED_STRING:
-                value, index = datatypes.decode_utf8_encoded_string(stream)
+                value, index = datatypes.decode_utf8_encoded_string(self.buffer)
             elif data_type == const.UTF8_STRING_PAIR:
-                value, index = datatypes.decode_utf8_string_pair(stream)
+                value, index = datatypes.decode_utf8_string_pair(self.buffer)
             else:
-                raise PropertiesException('Data type not supported')
+                raise PropertiesError('Data type not supported')
             if index < 0:
                 raise OutOfBoundsError()
             if index > length:
-                raise PropertiesException('Malformed Properties Length')
+                raise PropertiesError('Malformed Properties Length')
             length -= index
             self.buffer = self.buffer[index:]
             properties.append((code, value))
@@ -261,7 +261,7 @@ class Stream():
             raise ParameterError("Duplication flag is not a boolean")
         if not isinstance(retain, bool):
             raise ParameterError("Retain flag is not a boolean")
-        byte = packet_type << 4
+        byte = packet_type
         byte |= qos << 1
         if dup:
             byte |= 0x08
@@ -293,7 +293,7 @@ class Stream():
             raise ParameterError("Retain flag is not a boolean")
         if not isinstance(clean_start, bool):
             raise ParameterError("Retain flag is not a boolean")
-        byte = qos << 3
+        byte = will_qos << 3
         if username_flag:
             byte |= 0x80
         if password_flag:
@@ -348,25 +348,25 @@ class Stream():
 
             code, value = prop[0], prop[1]
             if code not in const.DICT:
-                raise PropertiesException('Property not supported')
+                raise PropertiesError(f'Property not supported: {hex(code)}')
             properties_buffer += datatypes.encode_byte(code)
             data_type = const.DICT[code]['type']
             if data_type == const.BYTE:
-                properties_buffer = datatypes.encode_byte(value)
+                properties_buffer += datatypes.encode_byte(value)
             elif data_type == const.TWO_BYTE_INT:
-                properties_buffer = datatypes.encode_two_byte_int(value)
+                properties_buffer += datatypes.encode_two_byte_int(value)
             elif data_type == const.FOUR_BYTE_INT:
-                properties_buffer = datatypes.encode_four_byte_int(value)
+                properties_buffer += datatypes.encode_four_byte_int(value)
             elif data_type == const.VARIABLE_BYTE_INT:
-                properties_buffer = datatypes.encode_variable_byte_int(value)
+                properties_buffer += datatypes.encode_variable_byte_int(value)
             elif data_type == const.BINARY_DATA:
-                properties_buffer = datatypes.encode_binary_data(value)
+                properties_buffer += datatypes.encode_binary_data(value)
             elif data_type == const.UTF8_ENCODED_STRING:
-                properties_buffer = datatypes.encode_utf8_encoded_string(value)
+                properties_buffer += datatypes.encode_utf8_encoded_string(value)
             elif data_type == const.UTF8_STRING_PAIR:
-                properties_buffer = datatypes.encode_utf8_string_pair(value)
+                properties_buffer += datatypes.encode_utf8_string_pair(value)
             else:
-                raise PropertiesException('Data type not supported')
+                raise PropertiesError('Data type not supported')
 
         length = datatypes.encode_variable_byte_int(len(properties_buffer))
         self.buffer += length + properties_buffer

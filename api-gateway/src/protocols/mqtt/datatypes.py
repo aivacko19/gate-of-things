@@ -74,7 +74,12 @@ def decode_binary_data(stream):
 
 def decode_utf8_encoded_string(stream):
     value, index = decode_binary_data(stream)
-    return value.decode("utf-8"), index
+    buf = b""
+    try:
+        buf = value.decode('utf-8')
+    except:
+        index = -1
+    return buf, index
 
 def decode_utf8_string_pair(stream):
     key, index1 = decode_utf8_encoded_string(stream)

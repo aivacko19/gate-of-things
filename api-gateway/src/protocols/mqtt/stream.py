@@ -63,7 +63,7 @@ class Stream():
         return self.buffer[:size]
 
     def update(self, size):
-        self.buffer = self.buffer[:size]
+        self.buffer = self.buffer[size:]
 
     def empty(self):
         return not self.buffer

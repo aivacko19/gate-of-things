@@ -21,6 +21,7 @@ def read(stream):
     packet_type, dup, qos, retain = stream.get_header()
     stream.get_var_int()
     packet['type'] = packet_type
+    logging.info(f"Received {packet_type} packet type")
     try:
         if packet_type == RESERVED:
             raise MalformedPacketError("Bad packet type")
@@ -64,6 +65,7 @@ def read(stream):
     return packet
 
 def read_pub_packet(packet, stream):
+    logging.info("Parsing PUB packet")
     packet['topic'] = stream.get_string()
     if packet['qos'] > 0:
         packet['id'] = stream.get_int()
@@ -71,6 +73,7 @@ def read_pub_packet(packet, stream):
     packet['payload'] = stream.dump()
 
 def read_sub_packet(packet, stream):
+    logging.info("Parsing SUB packet")
     packet['id'] = stream.get_int()
     packet['properties'] = get_properties(stream, packet['type'])
     packet['topics'] = list()
@@ -96,6 +99,7 @@ def read_sub_packet(packet, stream):
         packet['topics'].append(topic)
 
 def read_connect_packet(packet, stream):
+    logging.info("Parsing CONNECT packet")
     packet['protocol_name'] = stream.get_string()
     packet['protocol_version'] = stream.get_byte()
     username_flag, password_flag, retain, qos, \

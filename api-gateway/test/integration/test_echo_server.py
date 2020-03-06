@@ -1,4 +1,5 @@
 import unittest
+import socket
 
 from src.protocols.mqtt.parser import read
 from src.protocols.mqtt.parser import write
@@ -6,7 +7,7 @@ from src.protocols.mqtt.const import *
 from src.protocols.mqtt.datatypes import *
 from src.protocols.mqtt import stream
 
-binary_message = b'ferea\x30\x14\x99fae' # size 11
+binary_message = b'ferea\x30\x14\x1Afae' # size 11
 topic_name = 'topic' # size 5
 
 datasets = [
@@ -151,28 +152,28 @@ datasets = [
     )
 ]
 
-class TestParse(unittest.TestCase):
+class TestEchoServer(unittest.TestCase):
 
-    def test_parse(self):
+    def test_echo_server(self):
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect_ex(('localhost', 1887))
+
         for dataset in datasets:
             data = dataset[0]
-            result = dataset[1]
-            s = stream.Stream()
-            s.load(data)
-            self.assertFalse(s.is_loading())
-            packet = read(s)
-            for key in packet:
-                self.assertEqual(packet[key], result[key])
-            self.assertEqual(packet, result)
+            sent = sock.sendall(data)
 
-    def test_compose(self):
-        for dataset in datasets:
-            packet = dataset[1]
-            result = dataset[0]
             s = stream.Stream()
-            write(packet, s)
-            data = s.dump()
-            self.assertEqual(data, result)
+            while True:
+                data = sock.recv(4096)
+                s.load(data)
+                if not s.is_loading():
+                    break
+            recv_data = s.dump()
+
+            self.assertEqual(recv_data, data)
+
+        sock.close()
 
 
 if __name__ == '__main__':

@@ -18,7 +18,7 @@ def receive(hostname, queue_name, response_queue):
 
     def callback(ch, method, properties, body):
         packet = json.loads(body.decode('utf-8'), object_hook=bytescoder.as_bytes)
-        queue_name.put(packet)
+        response_queue.put(packet)
 
     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
     channel.start_consuming()

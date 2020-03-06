@@ -13,10 +13,15 @@ def callback(ch, method, properties, body):
     print('Recieved:', body)
     packet = json.loads(body, object_hook=bytescoder.as_bytes)
 
+    if 'disconnect' in packet:
+        if packet['disconnect']:
+            return 
+
     addr = packet['addr']
     print('Client:', addr)
     response_queue_name = packet['response_queue_name']
-    packet = {'addr': addr, 'write': False, 'disconnect': True}
+    packet['write'] = True
+    # packet = {'addr': addr, 'write': False, 'disconnect': True}
 
     body = json.dumps(packet, cls=bytescoder.BytesEncoder).encode('utf-8')
     channel.basic_publish(exchange='', routing_key=response_queue_name, body=body)

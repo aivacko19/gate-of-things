@@ -7,8 +7,10 @@ import time
 
 from src import gateway
 
+testport = 65432
+
 class TestProtocol:
-    port = 1887
+    port = 65432
 
     def new_stream():
         return {'buffer': b""}
@@ -59,7 +61,7 @@ class TestGateway(unittest.TestCase):
     def test_send(self):
         self.init_gateway()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect_ex(('localhost', 1887))
+        sock.connect_ex(('localhost', testport))
         packet = {'prvi': 1, 'drugi': 'drugi', 'treci': True}
         result = {}
         data = json.dumps(packet).encode('utf-8')
@@ -76,7 +78,7 @@ class TestGateway(unittest.TestCase):
     def test_send_and_receive(self):
         self.init_gateway()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect_ex(('localhost', 1887))
+        sock.connect_ex(('localhost', testport))
         packet = {'prvi': 1, 'drugi': 'drugi', 'treci': True}
         result = {}
         data = json.dumps(packet).encode('utf-8')
@@ -95,7 +97,7 @@ class TestGateway(unittest.TestCase):
     def test_send_and_disc(self):
         self.init_gateway()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect_ex(('localhost', 1887))
+        sock.connect_ex(('localhost', testport))
         packet = {'prvi': 1, 'drugi': 'drugi', 'treci': True}
         data = json.dumps(packet).encode('utf-8')
         result = b"WRONg"
@@ -113,7 +115,7 @@ class TestGateway(unittest.TestCase):
     def test_disc(self):
         self.init_gateway()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect_ex(('localhost', 1887))
+        sock.connect_ex(('localhost', testport))
         packet = {'prvi': 1, 'drugi': 'drugi', 'treci': True}
         data = json.dumps(packet).encode('utf-8')
         result = {'disconnect': False}

@@ -1,11 +1,10 @@
 import time
 import socket
 import json
+import sys
 
-from protocols.mqtt.protocol import Protocol
-
-protocol = Protocol()
-
+sys.path.append('..\\..')
+from src.protocols import mqtt as protocol
 
 def write(socket, stream):
     try:
@@ -17,22 +16,43 @@ def write(socket, stream):
     else:
         stream.update(sent)
 
+def read(socket, stream):
+    try:
+        # Should be ready to read
+        data = socket.recv(4096)
+    except BlockingIOError:
+        # Resource temporarily unavailable (errno EWOULDBLOCK)
+        pass
+    else:
+        if data:
+            stream.load(data)
+        else:
+            raise RuntimeError("Peer closed.")
 while True:
-    body = input("Insert Packet: ")
-    packet = json.loads(body)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect_ex(('localhost', protocol.get_port()))
 
-    stream = protocol.create_stream()
-    protocol.write(packet, stream)
-    print(stream.output(4096))
-    while True:
-        write(sock, stream)
-        if stream.empty():
-            break
+    body = input("Insert Packet: ")
+    packet = json.loads(body)
+    while body != "exit":
+        stream = protocol.compose(packet)
+        print(stream.output(4096))
+        while True:
+            write(sock, stream)
+            if stream.empty():
+                break
 
-    time.sleep(10)
+        while True:
+            read(sock, stream)
+            if not stream.is_loading():
+                break
+        print(stream.output(4096))
+        packet = protocol.parse(stream)
+        body = json.dumps(packet)
+        print(body)
+        body = input("Insert Packet: ")
+        packet = json.loads(body)
 
     sock.close()
 

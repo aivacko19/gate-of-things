@@ -2,6 +2,7 @@
 
 import socket
 import selectors
+import logging
 
 class Gateway():
     def __init__(self, host, protocol, request_queue, response_queue):
@@ -107,31 +108,49 @@ class Gateway():
                         client, addr = self.listener.accept()
                         self.put_socket(client)
                         self.register_read(client)
+                        logging.info(f'Got connection from {self.sock2addr(client)}')
 
                     else:
                         client = key.fileobj
                         stream = key.data
 
                         if mask is selectors.EVENT_READ:
+                            logging.info(f'Reading from {self.sock2addr(client)}')
                             try:
                                 self.read(client, stream)
-                            except RuntimeError:
+                            except:
+                                self.kill_socket(client)
+
+                            if not self.socket_alive(client):
                                 packet = {'addr': self.sock2addr(client),
                                           'disconnect': True}
                                 self.request_queue.put(packet)
-                                self.kill_socket(client)
                                 self.unregister(client)
-                            if self.protocol.busy(stream) or self.protocol.empty(stream):
+                                continue
+
+                            if self.protocol.busy(stream):
                                 continue
 
                             self.unregister(client, close=False)
 
+                            logging.info(f'Parsing {self.sock2addr(client)}')
                             packet = self.protocol.parse(stream)
                             packet['addr'] = self.sock2addr(client)
                             self.request_queue.put(packet)
 
                         elif mask is selectors.EVENT_WRITE:
-                            self.write(client, stream)
+                            try:
+                                self.write(client, stream)
+                            except:
+                                self.kill_socket(client)
+
+                            if not self.socket_alive(client):
+                                packet = {'addr': self.sock2addr(client),
+                                          'disconnect': True}
+                                self.request_queue.put(packet)
+                                self.unregister(client)
+                                continue
+
                             if not self.protocol.empty(stream):
                                 continue
 

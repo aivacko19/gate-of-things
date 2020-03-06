@@ -1,4 +1,4 @@
-import parser
+from . import parser
 from .stream import Stream
 
 port = 1887

@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from src import bytescoder
+from app import bytescoder
 
 class TestBytesCoder(unittest.TestCase):
     def test_encode(self):

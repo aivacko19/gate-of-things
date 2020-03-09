@@ -9,22 +9,26 @@ import queue
 import threading
 import logging
 import json
+import time
+import os
 
 import gateway
 import requester
 import receiver
 from protocols import mqtt as protocol
 
-RABBITMQ_HOSTNAME = 'localhost'
-MY_HOSTNAME = 'localhost'
-RECEIVER_NAME = 'gateway_receive'
-SERVICE_NAME = 'connection_service'
 
-# if len(sys.argv) != 3:
-#     print("usage:", sys.argv[0], "<host> <port>")
+# if len(sys.argv) != 2:
+#     print("usage:", sys.argv[0], "<rabbitmq_host>")
 #     sys.exit(1)
 
-# host, port = sys.argv[1], int(sys.argv[2])
+RABBITMQ_HOSTNAME = os.environ.get('RABBITMQ_HOSTNAME')
+if not RABBITMQ_HOSTNAME:
+    sys.exit(1)
+MY_HOSTNAME = os.getenv('HOST', 'localhost')
+RECEIVER_NAME = 'api_gateway_receiver:' + str(int(time.time()*1000))
+SERVICE_NAME = 'connection_service'
+
 
 request_queue = queue.Queue()
 receive_queue = queue.Queue()

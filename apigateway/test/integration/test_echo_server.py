@@ -1,11 +1,11 @@
 import unittest
 import socket
 
-from src.protocols.mqtt.parser import read
-from src.protocols.mqtt.parser import write
-from src.protocols.mqtt.const import *
-from src.protocols.mqtt.datatypes import *
-from src.protocols.mqtt import stream
+from app.protocols.mqtt.parser import read
+from app.protocols.mqtt.parser import write
+from app.protocols.mqtt.const import *
+from app.protocols.mqtt.datatypes import *
+from app.protocols.mqtt import stream
 
 binary_message = b'ferea\x30\x14\x1Afae' # size 11
 topic_name = 'topic' # size 5

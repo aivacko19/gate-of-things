@@ -4,7 +4,7 @@ import json
 import sys
 
 sys.path.append('..\\..')
-from src.protocols import mqtt as protocol
+from app.protocols import mqtt as protocol
 
 def write(socket, stream):
     try:

@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 
 import sys
-import socket
-import selectors
-import traceback
+import time
 import pika
-import queue
-import threading
 import logging
 import json
+
 import bytescoder
 
 def receive(hostname, queue_name, response_queue):
-    connection = pika.BlockingConnection(pika.ConnectionParameters(hostname))
+    connection = None
+    for i in range(10):
+        try:
+            connection = pika.BlockingConnection(pika.ConnectionParameters(host=hostname))
+        except pika.exceptions.AMQPConnectionError:
+            print(f"Connection attempt number {i} failed")
+            time.sleep(5)
+        if connection:
+            break
+    if not connection:
+        sys.exit(1)
     channel = connection.channel()
     channel.queue_declare(queue=queue_name)
 

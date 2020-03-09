@@ -1,7 +1,7 @@
 import unittest
 
-from src.protocols.mqtt import stream
-from src.protocols.mqtt import const
+from app.protocols.mqtt import stream
+from app.protocols.mqtt import const
 
 datasets = [
     [

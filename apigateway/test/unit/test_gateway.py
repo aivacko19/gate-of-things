@@ -5,7 +5,7 @@ import socket
 import threading
 import time
 
-from src import gateway
+from app import gateway
 
 testport = 65432
 

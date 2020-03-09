@@ -161,32 +161,34 @@ class Gateway():
 
                 if not self.response_queue.empty():
                     packet = self.response_queue.get()
-                    disconnect_flag = 'disconnect' in packet
-                    if disconnect_flag:
-                        disconnect_flag = packet['disconnect']
+                    read_flag = 'read' in packet
+                    if read_flag:
+                        read_flag = packet['read']
                     write_flag = 'write' in packet
                     if write_flag:
                         write_flag = packet['write']
 
                     addr = packet['addr']
                     if not self.socket_alive(addr):
-                        if not disconnect_flag:
-                            packet = {'disconnect': True}
+                        if read_flag:
+                            packet = {'addr': addr,
+                                      'disconnect': True}
                             self.request_queue.put(packet)
                         continue
                     client = self.get_socket(addr)
-                    if disconnect_flag:
-                        self.kill_socket(addr)
 
                     if write_flag:
                         del packet['addr']
                         del packet['write']
-                        if 'disconnect' in packet:
-                            del packet['disconnect']
+                        if 'read' in packet:
+                            if not read_flag:
+                                self.kill_socket(addr)
+                            del packet['read']
                         self.register_write(client, packet)
-                    elif not disconnect_flag:
+                    elif read_flag:
                         self.register_read(client)
                     else:
+                        self.kill_socket(addr)
                         self.unregister(client)
                 if self.stop_flag:
                     break

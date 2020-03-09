@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 
 import sys
-import socket
-import selectors
-import traceback
 import pika
 import queue
 import threading
 import logging
-import json
 import time
 import os
 

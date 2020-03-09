@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  apigateway:
+    build: ./apigateway
+    ports:
+      - "1887:1887"
+    volumes:
+      - ./apigateway:/usr/src/app
+    environment:
+      RABBITMQ_HOSTNAME: rabbitmq
+  echoservice:
+    build: ./echoservice
+    volumes:
+      - ./echoservice:/usr/src/app
+    environment:
+      RABBITMQ_HOSTNAME: rabbitmq
+  rabbitmq:
+    image: rabbitmq:3

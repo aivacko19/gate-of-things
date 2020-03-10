@@ -9,11 +9,20 @@ services:
       - ./apigateway:/usr/src/app
     environment:
       RABBITMQ_HOSTNAME: rabbitmq
-  echoservice:
-    build: ./echoservice
+  # echoservice:
+  #   build: ./echoservice
+  #   volumes:
+  #     - ./echoservice:/usr/src/app
+  #   environment:
+  #     RABBITMQ_HOSTNAME: rabbitmq
+  connservice:
+    build: ./connservice
     volumes:
-      - ./echoservice:/usr/src/app
+      - ./connservice:/usr/src/app
     environment:
       RABBITMQ_HOSTNAME: rabbitmq
+      QUEUE_NAME: connection-service
+  authorization:
+    
   rabbitmq:
     image: rabbitmq:3

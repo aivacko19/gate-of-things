@@ -1,28 +1,38 @@
 version: '3'
 
 services:
-  apigateway:
-    build: ./apigateway
-    ports:
-      - "1887:1887"
-    volumes:
-      - ./apigateway:/usr/src/app
-    environment:
-      RABBITMQ_HOSTNAME: rabbitmq
+  # apigateway:
+  #   build: ./apigateway
+  #   ports:
+  #     - "1887:1887"
+  #   volumes:
+  #     - ./apigateway:/usr/src/app
+  #   environment:
+  #     RABBITMQ_HOSTNAME: rabbitmq
   # echoservice:
   #   build: ./echoservice
   #   volumes:
   #     - ./echoservice:/usr/src/app
   #   environment:
   #     RABBITMQ_HOSTNAME: rabbitmq
-  connservice:
-    build: ./connservice
+  # connservice:
+  #   build: ./connservice
+  #   volumes:
+  #     - ./connservice:/usr/src/app
+  #   environment:
+  #     RABBITMQ_HOSTNAME: rabbitmq
+  #     QUEUE_NAME: connection-service
+  authentication:
+    build: ./authentication
+    ports:
+      - "55000:5000"
     volumes:
-      - ./connservice:/usr/src/app
+      - ./authentication:/usr/src/app
     environment:
       RABBITMQ_HOSTNAME: rabbitmq
-      QUEUE_NAME: connection-service
-  authorization:
-    
+      QUEUE_NAME: auth-service
+      URI_CALLBACK: "https://127.0.0.1:55000/"
   rabbitmq:
     image: rabbitmq:3
+    ports:
+      - "5672:5672"

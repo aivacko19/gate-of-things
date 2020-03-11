@@ -1,7 +1,7 @@
 import logging
 import mailer
 import const
-import oauth_request_uri
+from request_uri_client import oauth_service
 
 class Router:
     def __init__(self, sender, packet, addr):
@@ -67,7 +67,6 @@ class Router:
             'read': True
         }
         self.sender.send(new_packet)
-
 
     def route(self):
         if self.disconnect():
@@ -203,7 +202,7 @@ class Router:
 
     def authenticating(self, auth_data):
         if auth_data['method'] == 'OAuth2.0'
-            request_uri = oauth_request_uri.get_request_uri(self.sender.channel, auth_data['id'])
+            request_uri = oauth_service.get_uri(auth_data['id'])
             new_packet = {
                 'type': 'auth',
                 'code': const.CONTINUE_AUTHENTICATION,

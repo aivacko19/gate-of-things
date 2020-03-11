@@ -1,6 +1,7 @@
 import logging
 import mailer
 import const
+import oauth_request_uri
 
 class Router:
     def __init__(self, sender, packet, addr):
@@ -33,15 +34,14 @@ class Router:
 
         if self.type == 'disconnect':
             if self.connection:
-                normal_disconnection = self.packet['code'] == const.NORMAL_DISCONNECTION
+                normal_disconnection = self.packet['code'] == const.SUCCESS
                 connections.delete(self.connection, normal_disconnection)
             return True
 
-        if not self.connection.is_authenticated() and self.type != 'auth':
-            self.send_disconnect(const.PROTOCOL_ERROR)
+        if not self.connection.is_authenticated():
             return True
 
-        if self.connection and self.type in ['connect', 'auth']:
+        if self.connection and self.type == 'connect':
             self.send_disconnect(const.PROTOCOL_ERROR)
             return True
 
@@ -78,7 +78,7 @@ class Router:
         elif ptype == 'connect':
             self.connect()
         elif ptype == 'auth':
-            self.authenticate()
+            self.reauthenticate()
         elif ptype == 'publish':
             self.publish()
         elif ptype in ['puback', 'pubrec', 'pubrel', 'pubcomp']:
@@ -90,7 +90,6 @@ class Router:
         else:
             send_disconnect(self, const.MALFORMED_PACKET)
 
-
     def ping(self):
         new_packet = {
             'type' = 'pingresp',
@@ -99,6 +98,7 @@ class Router:
         if connection:
             new_packet['read'] = True
         self.sender.send(new_packet)
+
     def connect(self):
         addr = self.packet['addr']
         sender = self.packet['response_queue_name']
@@ -132,16 +132,24 @@ class Router:
 
         auth_data['id'] = client_id
 
-        authentication(auth_data)
 
-    def authenticate(self):
+        self.authenticating(auth_data)
+
+    def reauthenticate(self):
+        code = self.packet['code']
+        if code != const.REAUTHENTICATE:
+            self.send_disconnect(const.PROTOCOL_ERROR)
+
         auth_data = {}
         auth_data['method'] = self.packet['properties']['authentication_method']
         if 'authentication_data' in self.packet:
             auth_data['data'] = self.packet['properties']['authentication_data']
         auth_data['id'] = connection.id
 
-        authentication(auth_data)
+        if self.connection.method != auth_data['method']:
+            self.send_disconnect(const.BAD_AUTHENTICATION_METHOD)
+
+        self.authenticating(auth_data)
 
     def publish(self):
         message = {
@@ -192,6 +200,30 @@ class Router:
         }
 
         unsubscribing(unsub_packet)
+
+    def authenticating(self, auth_data):
+        if auth_data['method'] == 'OAuth2.0'
+            request_uri = oauth_request_uri.get_request_uri(self.sender.channel, auth_data['id'])
+            new_packet = {
+                'type': 'auth',
+                'code': const.CONTINUE_AUTHENTICATION,
+                'authentication_method': 'OAuth2.0',
+                'authentication_data': request_uri.encode('utf-8'),
+                'write': True,
+                'read': False, 
+                'wait': True
+            }
+            self.sender.send(new_packet)
+        else:
+            new_packet = {
+                'type': 'connack',
+                'code': const.BAD_AUTHENTICATION_METHOD,
+                'write': True,
+                'read': False
+            }
+            if self.type == 'auth':
+                new_packet['type'] = 'disconnect'
+            self.sender.send(new_packet)
 
 
 

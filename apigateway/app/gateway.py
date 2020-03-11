@@ -167,6 +167,9 @@ class Gateway():
                     write_flag = 'write' in packet
                     if write_flag:
                         write_flag = packet['write']
+                    wait_flag = 'wait' in packet
+                    if wait_flag:
+                        wait_flag = packet['wait']
 
                     addr = packet['addr']
                     if not self.socket_alive(addr):
@@ -180,14 +183,16 @@ class Gateway():
                     if write_flag:
                         del packet['addr']
                         del packet['write']
+                        if 'wait' in packet:
+                            del packet['wait']
                         if 'read' in packet:
-                            if not read_flag:
+                            if not read_flag and not wait_flag:
                                 self.kill_socket(addr)
                             del packet['read']
                         self.register_write(client, packet)
                     elif read_flag:
                         self.register_read(client)
-                    else:
+                    elif not wait_flag:
                         self.kill_socket(addr)
                         self.unregister(client)
                 if self.stop_flag:

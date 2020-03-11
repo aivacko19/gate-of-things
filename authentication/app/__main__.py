@@ -39,7 +39,9 @@ connection = None
 for i in range(NUM_OF_ATTEMPTS):
     print("Trying to connect to RabbitMQ")
     try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOSTNAME))
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(host=RABBITMQ_HOSTNAME)
+        )
     except pika.exceptions.AMQPConnectionError:
         print(f"Connection attempt number {i} failed")
         time.sleep(WAIT_TIME)

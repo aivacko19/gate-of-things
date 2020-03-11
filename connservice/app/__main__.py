@@ -5,8 +5,10 @@ import os
 import pika
 import time
 import logging
+import threading
 
 import mailer
+import oauth_response
 
 NUM_OF_ATTEMPTS = 10
 WAIT_TIME = 5
@@ -15,6 +17,9 @@ if not RABBITMQ_HOSTNAME:
     sys.exit(1)
 QUEUE_NAME = os.environ.get('QUEUE_NAME')
 if not QUEUE_NAME:
+    sys.exit(1)
+AUTH_QUEUE_NAME = os.environ.get('AUTH_QUEUE_NAME')
+if not AUTH_QUEUE_NAME:
     sys.exit(1)
 
 connection = None
@@ -31,8 +36,15 @@ for i in range(NUM_OF_ATTEMPTS):
 if not connection:
     sys.exit(1)
 
+thread = threading.Thread(
+    target=oauth_response.main,
+    daemon=True)
+thread.start()
+    
+
 channel = connection.channel()
 channel.queue_declare(queue=QUEUE_NAME)
+channel.queue_declare(queue=AUTH_QUEUE_NAME)
 channel.basic_consume(queue=QUEUE_NAME, on_message_callback=mailer.receive, auto_ack=True)
 logging.info('Connection established. Ready to receive messages.')
 channel.start_consuming()

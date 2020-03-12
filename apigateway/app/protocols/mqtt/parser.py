@@ -59,6 +59,9 @@ def read(stream):
     except ProtocolError as e: 
         packet['error'] = PROTOCOL_ERROR
         logging.error(repr(e))
+    except UnicodeDecodeError as e:
+        packet['error'] = PAYLOAD_FORMAT_INVALID
+        logging.error(repr(e))
     except Exception as e:
         packet['error'] = UNSPECIFIED_ERROR
         logging.error(repr(e))
@@ -71,6 +74,11 @@ def read_pub_packet(packet, stream):
         packet['id'] = stream.get_int()
     packet['properties'] = get_properties(stream, packet['type'])
     packet['payload'] = stream.dump()
+    if 'payload_format_indicator' in packet['properties']:
+        pfi = packet['properties']['payload_format_indicator']
+        if pfi == 1:
+            message['payload'].decode('utf-8')
+
 
 def read_sub_packet(packet, stream):
     logging.info("Parsing SUB packet")

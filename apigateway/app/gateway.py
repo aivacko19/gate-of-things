@@ -5,11 +5,10 @@ import selectors
 import logging
 
 class Gateway():
-    def __init__(self, host, protocol, request_queue, response_queue):
+    def __init__(self, host, protocol, mail):
         self.host = host
         self.protocol = protocol
-        self.request_queue = request_queue
-        self.response_queue = response_queue
+        self.mail = mail
         self.stop_flag = False
         self.listener = None
         self.selector = None
@@ -82,14 +81,15 @@ class Gateway():
             addr = self.sock2addr(addr)
         return addr in self.connections
 
-    def kill_socket(self, addr):
-        if not isinstance(addr, str):
-            addr = self.sock2addr(addr)
-        del self.connections[addr]
-
     def sock2addr(self, socket):
         pair = socket.getpeername()
         return f"{pair[0]}:{str(pair[1])}"
+
+    def disconnect_user(self, user_reference):
+        packet = {'disconnect': True}
+        self.mail.put(user_reference, packet)
+        if user_reference in self.connections:
+            del self.connections[user_reference]
 
     def start_listening(self):
         self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -113,119 +113,88 @@ class Gateway():
                     else:
                         client = key.fileobj
                         stream = key.data
+                        user_reference = self.sock2addr(client)
 
                         if mask is selectors.EVENT_READ:
-                            logging.info(f'Reading from {self.sock2addr(client)}')
-                            try:
-                                self.read(client, stream)
-                            except:
-                                self.kill_socket(client)
+                            logging.info(f'Reading from {user_reference}')
 
-                            if not self.socket_alive(client):
-                                packet = {'addr': self.sock2addr(client),
-                                          'disconnect': True}
-                                self.request_queue.put(packet)
+                            try:
+                                data = client.recv(4096)
+                            except BlockingIOError:
+                                # Resource temporarily unavailable (errno EWOULDBLOCK)
+                                continue
+                            if not data:
+                                self.disconnect_user(user_reference)
                                 self.unregister(client)
                                 continue
 
-                            if self.protocol.busy(stream):
-                                continue
+                            while data:
+                                self.protocol.append(stream, data)
+                                data = self.protocol.load_packet(stream)
+                                if self.protocol.still_loading(stream):
+                                    break
 
-                            self.unregister(client, close=False)
+                                logging.info(f'Parsing {user_reference}')
+                                packet, error = self.protocol.parse(stream)
+                                if error:
+                                    self.disconnect_user(user_reference)
+                                    self.register_write(client, packet)
+                                    break
 
-                            logging.info(f'Parsing {self.sock2addr(client)}')
-                            packet = self.protocol.parse(stream)
-                            packet['addr'] = self.sock2addr(client)
-                            self.request_queue.put(packet)
+                                self.mail.put(user_reference, packet)
+
+                            if (self.socket_alive(client) 
+                                and not self.protocol.still_loading(stream)):
+                                self.unregister(client, close=False)
 
                         elif mask is selectors.EVENT_WRITE:
+                            data = self.protocol.peek(stream, 4096)
                             try:
-                                self.write(client, stream)
-                            except:
-                                self.kill_socket(client)
-
-                            if not self.socket_alive(client):
-                                packet = {'addr': self.sock2addr(client),
-                                          'disconnect': True}
-                                self.request_queue.put(packet)
-                                self.unregister(client)
+                                sent = client.send(data)
+                            except BlockingIOError:
+                                # Resource temporarily unavailable (errno EWOULDBLOCK)
                                 continue
-
+                            
+                            self.protocol.position(stream, sent)
                             if not self.protocol.empty(stream):
                                 continue
 
-                            if not self.socket_alive(client):
-                                self.unregister(selector, client)
-                            else:
+                            if self.socket_alive(client):
                                 self.register_read(client)
+                            else:
+                                self.unregister(client)
 
-                if not self.response_queue.empty():
-                    packet = self.response_queue.get()
-                    read_flag = 'read' in packet
-                    if read_flag:
-                        read_flag = packet['read']
-                    write_flag = 'write' in packet
-                    if write_flag:
-                        write_flag = packet['write']
-                    wait_flag = 'wait' in packet
-                    if wait_flag:
-                        wait_flag = packet['wait']
 
-                    addr = packet['addr']
+                packet, addr = self.mail.get():
+                if packet:
+                    commands = packet['commands']
+                    del packet['commands']
+
                     if not self.socket_alive(addr):
-                        if read_flag:
-                            packet = {'addr': addr,
-                                      'disconnect': True}
-                            self.request_queue.put(packet)
+                        if not commands.get('disconnect'):
+                            self.disconnect_user(addr)
                         continue
-                    client = self.get_socket(addr)
 
-                    if write_flag:
-                        del packet['addr']
-                        del packet['write']
-                        if 'wait' in packet:
-                            del packet['wait']
-                        if 'read' in packet:
-                            if not read_flag and not wait_flag:
-                                self.kill_socket(addr)
-                            del packet['read']
+                    client = self.get_socket(addr)
+                    if commands.get('disconnect'):
+                        self.disconnect_user(addr)
+
+                    if commands.get('write'):
                         self.register_write(client, packet)
-                    elif read_flag:
+                    elif commands.get('disconnect'):
+                        self.unregister(client, close=True)
+                    elif commands.get('read')
                         self.register_read(client)
-                    elif not wait_flag:
-                        self.kill_socket(addr)
-                        self.unregister(client)
-                if self.stop_flag:
+                    else:
+                        self.unregister(client, close=False)
+
+                if self.stop_flag or not self.mail.is_alive():
                     break
 
         except KeyboardInterrupt:
             print("caught keyboard interrupt, exiting")
         finally:
             self.close()
-
-    def read(self, socket, stream):
-        try:
-            # Should be ready to read
-            data = socket.recv(4096)
-        except BlockingIOError:
-            # Resource temporarily unavailable (errno EWOULDBLOCK)
-            pass
-        else:
-            if data:
-                self.protocol.write(stream, data)
-            else:
-                raise RuntimeError("Peer closed.")
-
-    def write(self, socket, stream):
-        try:
-            # Should be ready to write
-            data = self.protocol.peek(stream, 4096)
-            sent = socket.send(data)
-        except BlockingIOError:
-            # Resource temporarily unavailable (errno EWOULDBLOCK)
-            pass
-        else:
-            self.protocol.position(stream, sent)
 
     def stop(self):
         self.stop_flag = True

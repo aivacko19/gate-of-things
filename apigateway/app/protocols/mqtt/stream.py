@@ -36,27 +36,30 @@ class Stream():
         if self.header < 0:
             value, index = datatypes.decode_byte(self.buffer)
             if index < 0:
-                return
+                return b""
             self.buffer = self.buffer[index:]
             self.header = value
         if self.size < 0:
             value, index = datatypes.decode_variable_byte_int(self.buffer)
             if index < 0:
-                return
+                return b""
             self.buffer = self.buffer[index:]
             self.size = value
 
-        if len(self.buffer) > self.size:
-            raise OverflowError('More than one packet')
-        if len(self.buffer) == self.size:
-            self.buffer = (datatypes.encode_byte(self.header)
-                           + datatypes.encode_variable_byte_int(self.size)
-                           + self.buffer)
-            self.header = -1
-            self.size = -1
-            self.loading = False
+        if len(self.buffer) < self.size:
+            return b""
 
-    def is_loading(self):
+        data_left = self.buffer[self.size:]
+        self.buffer = self.buffer[:self.size]
+        self.buffer = (datatypes.encode_byte(self.header)
+                       + datatypes.encode_variable_byte_int(self.size)
+                       + self.buffer)
+        self.header = -1
+        self.size = -1
+        self.loading = False
+        return data_left
+
+    def still_loading(self):
         return self.loading
 
     def output(self, size):
@@ -127,7 +130,7 @@ class Stream():
 
     def get_header(self):
         header = self.get_byte()
-        packet_type = header & 0xF0
+        packet_type = const.get_type_str(header & 0xF0)
         dup = header & 0x08 != 0
         qos = (header >> 1) & 0x03
         retain = header & 0x01 != 0
@@ -253,15 +256,15 @@ class Stream():
                    qos=0,
                    retain=False,
                    ):
-        if not isinstance(packet_type, int):
-            raise ParameterError("Packet type is not a number")
+        if not isinstance(packet_type, str):
+            raise ParameterError("Packet type is not a string")
         if not isinstance(qos, int):
             raise ParameterError("QoS is not a number")
         if not isinstance(dup, bool):
             raise ParameterError("Duplication flag is not a boolean")
         if not isinstance(retain, bool):
             raise ParameterError("Retain flag is not a boolean")
-        byte = packet_type
+        byte = const.get_type_code(packet_type)
         byte |= qos << 1
         if dup:
             byte |= 0x08

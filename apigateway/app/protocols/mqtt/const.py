@@ -6,27 +6,55 @@ VARIABLE_BYTE_INT = 4
 BINARY_DATA = 5
 UTF8_STRING_PAIR = 6
 
-RESERVED = 0x00
-CONNECT = 0x10
-CONNACK = 0x20
-PUBLISH = 0x30
-PUBACK = 0x40
-PUBREC = 0x50
-PUBREL = 0x60
-PUBCOMP = 0x70
-SUBSCRIBE = 0x80
-SUBACK = 0x90
-UNSUBSCRIBE = 0xA0
-UNSUBACK = 0xB0
-PINGREQ = 0xC0
-PINGRESP = 0xD0
-DISCONNECT = 0xE0
-AUTH = 0xF0
-WILL = 0x100
+RESERVED = 'reserved',
+CONNECT = 'connect', 
+CONNACK = 'connack',
+PUBLISH = 'publish', 
+PUBACK = 'puback',
+PUBREC = 'pubrec', 
+PUBREL = 'pubrel', 
+PUBCOMP = 'pubcomp', 
+SUBSCRIBE = 'subscribe',
+SUBACK = 'suback',
+UNSUBSCRIBE = 'unsubscribe', 
+UNSUBACK = 'unsuback',
+PINGREQ = 'pingreq',
+PINGRESP = 'pingresp',
+DISCONNECT = 'disconnect',
+AUTH = 'auth'
+WILL = 'will'
+
+TYPE_TRANSLATOR = {
+    RESERVED: 0x00
+    CONNECT: 0x10
+    CONNACK: 0x20
+    PUBLISH: 0x30
+    PUBACK: 0x40
+    PUBREC: 0x50
+    PUBREL: 0x60
+    PUBCOMP: 0x70
+    SUBSCRIBE: 0x80
+    SUBACK: 0x90
+    UNSUBSCRIBE: 0xA0
+    UNSUBACK: 0xB0
+    PINGREQ: 0xC0
+    PINGRESP: 0xD0
+    DISCONNECT: 0xE0
+    AUTH: 0xF0
+}
+
+def get_type_str(value):
+    return list(TYPE_TRANSLATOR.keys())[
+            list(TYPE_TRANSLATOR.values()).index(packet_type)
+        ]
+
+def get_type_code(value):
+    return TYPE_TRANSLATOR.get(value)
 
 UNSPECIFIED_ERROR = 0x80
 MALFORMED_PACKET = 0X81
 PROTOCOL_ERROR = 0X82
+PAYLOAD_FORMAT_INVALID = 0x99
 
 SERVER_REFERENCE = 0X1C # Unique
 

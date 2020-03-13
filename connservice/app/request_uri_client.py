@@ -11,7 +11,6 @@ class RequestUriRpcClient(object):
                 host=rabbitmq,
                 connection_attempts=10,
                 retry_delay=5,))
-
         self.channel = self.connection.channel()
         self.server = remote_server
 

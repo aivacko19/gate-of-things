@@ -4,11 +4,10 @@ import const
 from request_uri_client import oauth_service
 
 class Router:
-    def __init__(self, sender, packet, addr):
-        self.sender = sender
+    def __init__(self, connection, packet):
+        self.connection = connection
         self.packet = packet
-        self.connection = connections.get(addr)
-        self.type = packet.get('type', 'reserved')
+        self.type = packet.get('type')
 
     def route(self):
         new_packet = {'commands': {}}
@@ -59,7 +58,8 @@ class Router:
                     or method != self.connection.method
                     or method not in ['OAuth2']):
                     new_packet['code'] = const.BAD_AUTHENTICATION_METHOD
-                new_packet = self.reauthenticate()
+                else:
+                    new_packet = self.authenticating()
             else:
                 new_packet['commands']['read'] = True
                 if self.type in ['subscribe', 'unsubscribe']:
@@ -78,21 +78,6 @@ class Router:
         conn = connection.Connection(addr, sender, client_id, method)
         # TODO persist connection
 
-        auth_data = {
-            'user_reference': client_id,
-            'method': method,
-            'data': self.packet.get('properties').get('authentication_data'),
-            'username': self.packet.get('username'),
-            'password': self.packet.get('password')
-        }
-        return self.authenticating(auth_data)
-
-    def reauthenticate(self):
-        auth_data = {
-            'user_reference': self.connection.id,
-            'method': self.packet.get('properties').get('authentication_method'),
-            'data': self.packet.get('properties').get('authentication_data'),
-        }
         return self.authenticating(auth_data)
 
     def publish(self):
@@ -141,8 +126,9 @@ class Router:
 
         unsubscribing(unsub_packet)
 
-    def authenticating(self, auth_data):
-        if auth_data['method'] == 'OAuth2.0'
+    def authenticating(self):
+        method = self.packet.get('properties').get('method')
+        if method == 'OAuth2.0'
             request_uri = oauth_service.get_uri(auth_data['user_reference'])
             return {
                 'type': 'auth',

@@ -165,7 +165,7 @@ class Gateway():
                                 self.unregister(client)
 
 
-                packet, addr = self.mail.get():
+                addr, packet = self.mail.get()
                 if packet:
                     commands = packet['commands']
                     del packet['commands']
@@ -183,7 +183,7 @@ class Gateway():
                         self.register_write(client, packet)
                     elif commands.get('disconnect'):
                         self.unregister(client, close=True)
-                    elif commands.get('read')
+                    elif commands.get('read'):
                         self.register_read(client)
                     else:
                         self.unregister(client, close=False)

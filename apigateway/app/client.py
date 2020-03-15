@@ -24,7 +24,8 @@ def read(socket, stream):
         pass
     else:
         if data:
-            stream.load(data)
+            stream.append(data)
+            stream.load()
         else:
             raise RuntimeError("Peer closed.")
 while True:
@@ -45,7 +46,7 @@ while True:
 
         while True:
             read(sock, stream)
-            if not stream.is_loading():
+            if not stream.still_loading():
                 break
         print(stream.output(4096))
         packet = protocol.parse(stream)

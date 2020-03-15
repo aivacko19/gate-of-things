@@ -3,6 +3,8 @@ import os
 
 import pika
 
+publisher = None
+
 class AuthenticationPublisher:
 
     def __init__(self, rabbitmq, recepient):
@@ -40,12 +42,3 @@ class AuthenticationPublisher:
         while self.response is None:
             self.connection.process_data_events()
         return self.response
-
-RABBITMQ = os.environ.get('RABBITMQ')
-if not RABBITMQ:
-    sys.exit(1)
-AUTH_RECEPIENT = os.environ.get('AUTH_RECEPIENT')
-if not AUTH_RECEPIENT:
-    sys.exit(1)
-
-publisher = AuthenticationPublisher(RABBITMQ, AUTH_RECEPIENT)

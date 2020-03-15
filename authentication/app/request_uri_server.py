@@ -16,11 +16,11 @@ class RequestUriRpcServer:
                 connection_attempts=10,
                 retry_delay=5,))
 
-        self.channel = connection.channel()
+        self.channel = self.connection.channel()
         self.server = server
         self.redirect_uri = redirect_uri
 
-        channel.queue_declare(queue=server)
+        self.channel.queue_declare(queue=server)
 
     def on_request(self, ch, method, properties, body):
         user_reference = body
@@ -44,11 +44,11 @@ class RequestUriRpcServer:
 
     def run(self):
         self.thread = threading.Thread(
-            target=self.start_consuming,
+            target=self.consume,
             daemon=True)
-        thread.start()
+        self.thread.start()
 
     def consume(self):
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(queue=self.server, on_message_callback=self.on_request)
-        channel.start_consuming()
+        self.channel.basic_qos(prefetch_count=1)
+        self.channel.basic_consume(queue=self.server, on_message_callback=self.on_request)
+        self.channel.start_consuming()

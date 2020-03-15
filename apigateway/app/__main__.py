@@ -9,8 +9,6 @@ import time
 import os
 
 import gateway
-import requester
-import receiver
 from protocols import mqtt as protocol
 import mailer
 
@@ -23,7 +21,7 @@ RABBITMQ = os.environ.get('RABBITMQ')
 if not RABBITMQ:
     sys.exit(1)
 MY_HOSTNAME = os.getenv('HOST', 'localhost')
-SERVICE_NAME = 'connection_service'
+SERVICE_NAME = os.environ.get('GATEWAY_REMOTE')
 
 mail = mailer.Mail(RABBITMQ, SERVICE_NAME)
 mail.start()

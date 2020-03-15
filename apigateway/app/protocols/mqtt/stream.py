@@ -25,14 +25,14 @@ class Stream():
         self.size = -1
         self.loading = False
 
-    def load(self, data):
-        if not isinstance(data, bytes):
-            raise ParameterError("Argument is not a bytes type")
-        if not self.loading and self.buffer:
-            raise Exception("Cannot load new packet, old packet still in use")
+    def load(self):
+        # if not isinstance(data, bytes):
+        #     raise ParameterError("Argument is not a bytes type")
+        # if not self.loading and self.buffer:
+        #     raise Exception("Cannot load new packet, old packet still in use")
         self.loading = True
 
-        self.buffer += data
+        # self.buffer += data
         if self.header < 0:
             value, index = datatypes.decode_byte(self.buffer)
             if index < 0:

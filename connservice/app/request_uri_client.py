@@ -3,6 +3,8 @@ import uuid
 import os
 import sys
 
+oauth_client = None
+
 class RequestUriRpcClient(object):
 
     def __init__(self, rabbitmq, remote_server):
@@ -39,12 +41,3 @@ class RequestUriRpcClient(object):
         while self.response is None:
             self.connection.process_data_events()
         return self.response
-
-RABBITMQ_HOSTNAME = os.environ.get('RABBITMQ_HOSTNAME')
-if not RABBITMQ_HOSTNAME:
-    sys.exit(1)
-AUTH_QUEUE_NAME = os.environ.get('AUTH_QUEUE_NAME')
-if not AUTH_QUEUE_NAME:
-    sys.exit(1)
-
-oauth_service = RequestUriRpcClient(RABBITMQ_HOSTNAME, AUTH_QUEUE_NAME)

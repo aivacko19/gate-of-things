@@ -14,7 +14,7 @@ def parse(stream):
         if packet['type'] in [const.CONNACK,
                               const.SUBACK,
                               const.UNSUBACK,
-                              const.PINGRESP,]
+                              const.PINGRESP,]:
             error = const.PROTOCOL_ERROR
     if error:
         new_packet = {'code': error}

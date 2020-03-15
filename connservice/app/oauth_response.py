@@ -1,18 +1,17 @@
 import threading
 import pika
 
-import connections
 import const
 
 class OAuthListener:
 
-    def __init__(self, rabbitmq, listener):
+    def __init__(self, rabbitmq, listener, connection_db):
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=rabbitmq,
                 connection_attempts=10,
                 retry_delay=5,))
-        self.channel = connection.channel()
+        self.channel = self.connection.channel()
         self.channel.queue_declare(queue=listener)
         self.channel.basic_consume(
             queue=listener,
@@ -20,22 +19,27 @@ class OAuthListener:
             auto_ack=True)
         self.thread = threading.Thread(
             target=self.channel.start_consuming,
-            deamon=True)
+            daemon=True)
+        self.conn_db = connection_db
 
     def on_response(self, ch, method, props, body):
         email = body
         client_id = props.correlation_id
-        conn = connections.get(client_id)
+        conn = self.conn_db.get(client_id)
 
         packet = {'commands': {'write': True}}
         if email == 'none':
-            packet['type'] = 'disconnect' if conn.verified else 'connack'
+            packet['type'] = 'disconnect' if conn.verified() else 'connack'
             packet['code'] = const.NOT_AUTHORIZED
             packet['commands']['disconnect'] = True
         else:
-            packet['type'] = 'auth' if conn.verified else 'connack'
+            packet['type'] = 'auth' if conn.verified() else 'connack'
             packet['code'] = const.SUCCESS
             packet['commands']['read'] = True    
+            if conn.verified() and conn.get_random_id():
+                packet['properties'] = {
+                    'assigned_client_identifier': conn.get_id()}
+
 
         body = json.dumps(packet)
         self.channel.basic_publish(
@@ -47,10 +51,11 @@ class OAuthListener:
 
         if email == 'none': return
 
-        if conn.verified:
+        if conn.verified():
             # Set new email and check subscription authorization
             pass
         else:
+            conn.set_email(email)
             # Create new Session
         
     def run(self):

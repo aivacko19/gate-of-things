@@ -1,27 +1,28 @@
 version: '3'
 
 services:
-  # apigateway:
-  #   build: ./apigateway
-  #   ports:
-  #     - "1887:1887"
-  #   volumes:
-  #     - ./apigateway:/usr/src/app
-  #   environment:
-  #     RABBITMQ_HOSTNAME: rabbitmq
-  # echoservice:
-  #   build: ./echoservice
-  #   volumes:
-  #     - ./echoservice:/usr/src/app
-  #   environment:
-  #     RABBITMQ_HOSTNAME: rabbitmq
-  # connservice:
-  #   build: ./connservice
-  #   volumes:
-  #     - ./connservice:/usr/src/app
-  #   environment:
-  #     RABBITMQ_HOSTNAME: rabbitmq
-  #     QUEUE_NAME: connection-service
+  apigateway:
+    build: ./apigateway
+    ports:
+      - "1887:1887"
+    volumes:
+      - ./apigateway:/usr/src/app
+    environment:
+      RABBITMQ: rabbitmq
+      GATEWAY_REMOTE: gateway-listener
+  connservice:
+    build: ./connservice
+    volumes:
+      - ./connservice:/usr/src/app
+    environment:
+      RABBITMQ: rabbitmq
+      GATEWAY_QUEUE: gateway-listener
+      AUTH_QUEUE: auth-listener
+      AUTH_REMOTE: auth-service
+      DB_NAME: mydb
+      DB_USER: root
+      DB_PASS: root
+      DB_HOST: conn_db
   authentication:
     build: ./authentication
     ports:
@@ -29,10 +30,25 @@ services:
     volumes:
       - ./authentication:/usr/src/app
     environment:
-      RABBITMQ_HOSTNAME: rabbitmq
-      QUEUE_NAME: auth-service
-      URI_CALLBACK: "https://127.0.0.1:55000/"
+      RABBITMQ: rabbitmq
+      QUEUE: auth-service
+      RECEPIENT: auth-listener
+      REDIRECT_URI: "https://127.0.0.1:55000/"
   rabbitmq:
     image: rabbitmq:3
     ports:
       - "5672:5672"
+  conn_db:
+    image: postgres:10-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - conn-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: mydb
+
+volumes:
+  conn-db-data:
+

@@ -7,44 +7,27 @@ import time
 import logging
 import threading
 
-import mailer
+import gateway_listener
 import oauth_response
+import connection_db
+import request_uri_client
 
-NUM_OF_ATTEMPTS = 10
-WAIT_TIME = 5
-RABBITMQ_HOSTNAME = os.environ.get('RABBITMQ_HOSTNAME')
-if not RABBITMQ_HOSTNAME:
-    sys.exit(1)
-QUEUE_NAME = os.environ.get('QUEUE_NAME')
-if not QUEUE_NAME:
-    sys.exit(1)
-AUTH_QUEUE_NAME = os.environ.get('AUTH_QUEUE_NAME')
-if not AUTH_QUEUE_NAME:
-    sys.exit(1)
 
-connection = None
-for i in range(NUM_OF_ATTEMPTS):
-    logging.info("Trying to connect to RabbitMQ")
-    try:
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOSTNAME))
-    except pika.exceptions.AMQPConnectionError:
-        logging.info(f"Connection attempt number {i} failed")
-        time.sleep(WAIT_TIME)
-    if connection:
-        logging.error("Exceeded number of attempts, exiting...")
-        break
-if not connection:
-    sys.exit(1)
+DB_NAME = os.environ.get('DB_NAME')
+DB_USER = os.environ.get('DB_USER')
+DB_PASS = os.environ.get('DB_PASS')
+DB_HOST = os.environ.get('DB_HOST')
 
-thread = threading.Thread(
-    target=oauth_response.main,
-    daemon=True)
-thread.start()
-    
+db = connection_db.ConnectionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
 
-channel = connection.channel()
-channel.queue_declare(queue=QUEUE_NAME)
-channel.queue_declare(queue=AUTH_QUEUE_NAME)
-channel.basic_consume(queue=QUEUE_NAME, on_message_callback=mailer.receive, auto_ack=True)
-logging.info('Connection established. Ready to receive messages.')
-channel.start_consuming()
+RABBITMQ = os.environ.get('RABBITMQ', 'localhost')
+GATEWAY_QUEUE = os.environ.get('GATEWAY_QUEUE', 'conn-service-auth')
+AUTH_QUEUE = os.environ.get('AUTH_QUEUE', 'conn-service-gate')
+AUTH_REMOTE = os.environ.get('AUTH_REMOTE', 'auth-service')
+
+request_uri_client.oauth_response = request_uri_client.RequestUriRpcClient(RABBITMQ, AUTH_REMOTE)
+oauth_service = oauth_response.OAuthListener(RABBITMQ, AUTH_QUEUE, db)
+gateway_service = gateway_listener.GatewayListener(RABBITMQ, GATEWAY_QUEUE, db)
+
+oauth_service.run()
+gateway_service.run()

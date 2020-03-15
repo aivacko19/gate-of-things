@@ -1,9 +1,8 @@
 import logging
-import mailer
 import const
-from request_uri_client import oauth_service
+from request_uri_client import oauth_client
 
-class Router:
+class RequestRouter:
     def __init__(self, connection, packet):
         self.connection = connection
         self.packet = packet
@@ -11,7 +10,7 @@ class Router:
 
     def route(self):
         new_packet = {'commands': {}}
-        if not self.connection:
+        if not self.connection.connected():
             new_packet['type'] = 'connack'
             new_packet['commands']['write'] = True
             new_packet['commands']['disconnect'] = True
@@ -24,8 +23,9 @@ class Router:
                 if not method or method not in ['OAuth2']:
                     new_packet['code'] = const.BAD_AUTHENTICATION_METHOD
                 else:
-                    new_packet = self.connect()
-        elif not self.connection.verified:
+                    self.connect()
+                    return {}
+        elif not self.connection.verified():
             if self.type not in ['auth', 'disconnect']:
                 new_packet['type'] = 'connack'
                 new_packet['code'] = const.PROTOCOL_ERROR
@@ -55,7 +55,7 @@ class Router:
                     new_packet['code'] = const.PROTOCOL_ERROR
                 method = self.packet['properties'].get('authentication_method')
                 if (not method
-                    or method != self.connection.method
+                    or method != self.connection.get_method()
                     or method not in ['OAuth2']):
                     new_packet['code'] = const.BAD_AUTHENTICATION_METHOD
                 else:
@@ -69,16 +69,10 @@ class Router:
         return new_packet
 
     def connect(self):
-        addr = self.packet['addr']
-        sender = self.packet['response_queue_name']
         client_id = self.packet['client_id']
-        clean_start = self.packet['clean_start']
         method = self.packet['properties'].get('authentication_method')
-
-        conn = connection.Connection(addr, sender, client_id, method)
-        # TODO persist connection
-
-        return self.authenticating(auth_data)
+        self.connection.set_method(method)
+        if not client: self.connection.set_random_id(True)
 
     def publish(self):
         message = {
@@ -97,7 +91,7 @@ class Router:
             message['expiry'] = self.packet['message_expiry']
         if 'content_type' in self.packet:
             message['content_type'] = self.packet['content_type']
-        publishing(message)
+        # publishing(message)
 
         return {'read': True}
 
@@ -115,7 +109,7 @@ class Router:
         if 'subscription_identifier' in packet:
             sub_packet['sub_id'] = packet['subscription_identifier']
 
-        subscribing(sub_packet)
+        # subscribing(sub_packet)
 
     def unsubscribe(self):
         sub_packet = {
@@ -124,12 +118,12 @@ class Router:
             'subscriptions': self.packet['topics']
         }
 
-        unsubscribing(unsub_packet)
+        # unsubscribing(unsub_packet)
 
     def authenticating(self):
-        method = self.packet.get('properties').get('method')
-        if method == 'OAuth2.0'
-            request_uri = oauth_service.get_uri(auth_data['user_reference'])
+        method = self.connection.get_method()
+        if method == 'OAuth2.0':
+            request_uri = oauth_client.get_uri(self.connection.get_id())
             return {
                 'type': 'auth',
                 'code': const.CONTINUE_AUTHENTICATION,

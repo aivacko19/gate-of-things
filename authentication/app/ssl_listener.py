@@ -45,6 +45,7 @@ def index():
 
     email = userinfo["email"]
     publisher.publish(user_reference, email)
+    
     return (
         "<p>You're logged in! Email: {}</p>"
         "<p>Check your MQTT Connection</p>".format(email)

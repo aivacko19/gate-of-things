@@ -13,15 +13,16 @@ import bytescoder
 class Mail:
 
     def __init__(self, rabbitmq, remote_server):
+        self.rabbitmq = rabbitmq
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=rabbitmq,
                 connection_attempts=10,
                 retry_delay=5,))
-        self.channel = connection.channel()
-        result = self.channel.queue_declare(queue='', exclusive=True)
+        self.receiver_channel = self.connection.channel()
+        result = self.receiver_channel.queue_declare(queue='', exclusive=True)
         self.callback_queue = result.method.queue
-        self.channel.basic_consume(
+        self.receiver_channel.basic_consume(
             queue=self.callback_queue,
             on_message_callback=self.on_response,
             auto_ack=True)
@@ -30,16 +31,22 @@ class Mail:
         self.outbox = queue.Queue()
         self.sender_thread = threading.Thread(
             target=self.request_loop,
-            deamon=True)
+            daemon=True)
         self.receiver_thread = threading.Thread(
-            target=self.channel.start_consuming,
-            deamon=True)
+            target=self.receiver_channel.start_consuming,
+            daemon=True)
 
     def on_response(self, ch, method, props, body):
         packet = json.loads(body, object_hook=bytescoder.as_bytes)
         self.inbox.put((props.correlation_id, packet))
 
     def request_loop(self):
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=self.rabbitmq,
+                connection_attempts=10,
+                retry_delay=5,))
+        channel = connection.channel()
         while True:
             user_reference, packet = self.outbox.get()
             body = json.dumps(packet, cls=bytescoder.BytesEncoder)

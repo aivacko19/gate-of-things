@@ -14,7 +14,8 @@ class RequestUriRpcServer:
             pika.ConnectionParameters(
                 host=rabbitmq,
                 connection_attempts=10,
-                retry_delay=5,))
+                retry_delay=5,
+                heartbeat=0,))
 
         self.channel = self.connection.channel()
         self.server = server
@@ -22,7 +23,7 @@ class RequestUriRpcServer:
 
         self.channel.queue_declare(queue=server)
 
-    def on_request(self, ch, method, properties, body):
+    def on_request(self, ch, method, props, body):
         user_reference = body
 
         provider_cfg = provider.get_cfg()

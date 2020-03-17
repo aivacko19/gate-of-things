@@ -1,5 +1,7 @@
 import threading
 import pika
+import logging
+import json
 
 import const
 
@@ -10,7 +12,8 @@ class OAuthListener:
             pika.ConnectionParameters(
                 host=rabbitmq,
                 connection_attempts=10,
-                retry_delay=5,))
+                retry_delay=5,
+                heartbeat=0,))
         self.channel = self.connection.channel()
         self.channel.queue_declare(queue=listener)
         self.channel.basic_consume(
@@ -21,45 +24,56 @@ class OAuthListener:
             target=self.channel.start_consuming,
             daemon=True)
         self.conn_db = connection_db
+        logging.info(f"Created OAuthListener listening on queue {listener}")
 
     def on_response(self, ch, method, props, body):
-        email = body
-        client_id = props.correlation_id
-        conn = self.conn_db.get(client_id)
+        try:
+            logging.info("Start verification")
+            email = body.decode("utf-8")
+            client_id = props.correlation_id
+            logging.info(f"Email: {email}, client_id: {client_id}")
+            conn = self.conn_db.get(client_id)
 
-        packet = {'commands': {'write': True}}
-        if email == 'none':
-            packet['type'] = 'disconnect' if conn.verified() else 'connack'
-            packet['code'] = const.NOT_AUTHORIZED
-            packet['commands']['disconnect'] = True
-        else:
-            packet['type'] = 'auth' if conn.verified() else 'connack'
-            packet['code'] = const.SUCCESS
-            packet['commands']['read'] = True    
-            if conn.verified() and conn.get_random_id():
-                packet['properties'] = {
-                    'assigned_client_identifier': conn.get_id()}
+            packet = {'commands': {'write': True}}
+            if email == 'none':
+                packet['type'] = 'disconnect' if conn.verified() else 'connack'
+                packet['code'] = const.NOT_AUTHORIZED
+                packet['commands']['disconnect'] = True
+            else:
+                packet['type'] = 'auth' if conn.verified() else 'connack'
+                packet['code'] = const.SUCCESS
+                packet['commands']['read'] = True
+                packet['properties'] = {}
+                if conn.verified():
+                    packet['properties']['authentication_method'] = 'OAuth2.0'
+                elif conn.get_random_id():
+                    packet['properties']['assigned_client_identifier'] = conn.get_id()
 
+            socket, reply_queue = conn.get_socket()
+            body = json.dumps(packet)
+            ch.basic_publish(
+                exchange='',
+                routing_key=reply_queue,
+                properties=pika.BasicProperties(
+                    correlation_id=socket,),
+                body=body)
 
-        body = json.dumps(packet)
-        self.channel.basic_publish(
-            exchange='',
-            routing_key=conn.reply_queue,
-            properties=pika.BasicProperties(
-                correlation_id=conn.socket,),
-            body=user_reference)
+            if email == 'none': return
 
-        if email == 'none': return
-
-        if conn.verified():
-            # Set new email and check subscription authorization
-            pass
-        else:
             conn.set_email(email)
-            # Create new Session
+            self.conn_db.update_email(conn)
+            if conn.verified():
+                # Check subscription authorization
+                pass
+            else:
+                # Create new Session
+                pass
+        except Exception as e:
+            logging.error(e)
         
     def run(self):
         self.thread.start()
+        logging.info("Started Thread for OAuthListener")
 
     def is_alive(self):
         return self.thread.is_alive()

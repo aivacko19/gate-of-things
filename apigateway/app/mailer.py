@@ -18,7 +18,8 @@ class Mail:
             pika.ConnectionParameters(
                 host=rabbitmq,
                 connection_attempts=10,
-                retry_delay=5,))
+                retry_delay=5,
+                heartbeat=0,))
         self.receiver_channel = self.connection.channel()
         result = self.receiver_channel.queue_declare(queue='', exclusive=True)
         self.callback_queue = result.method.queue
@@ -45,7 +46,8 @@ class Mail:
             pika.ConnectionParameters(
                 host=self.rabbitmq,
                 connection_attempts=10,
-                retry_delay=5,))
+                retry_delay=5,
+                heartbeat=0,))
         channel = connection.channel()
         while True:
             user_reference, packet = self.outbox.get()
@@ -63,11 +65,13 @@ class Mail:
         self.receiver_thread.start()
 
     def put(self, user_reference, packet):
+        logging.info("Sending packet to connack service")
         self.outbox.put((user_reference, packet))
 
     def get(self):
         if self.inbox.empty():
             return None, None
+        logging.info("Receiving packet to connack service")
         return self.inbox.get()
 
     def is_alive(self):

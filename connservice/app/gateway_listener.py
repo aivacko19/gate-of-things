@@ -15,7 +15,8 @@ class GatewayListener:
             pika.ConnectionParameters(
                 host=rabbitmq,
                 connection_attempts=10,
-                retry_delay=5,))
+                retry_delay=5,
+                heartbeat=0,))
         self.channel = self.connection.channel()
         self.channel.queue_declare(queue=listener)
         self.channel.basic_consume(
@@ -40,6 +41,7 @@ class GatewayListener:
             return
 
         conn = self.conn_db.get_by_socket(socket, reply_queue)
+        logging.info(f"Connection info: id={conn.get_id()}, email={conn.get_email()}")
         router = request_router.RequestRouter(conn, packet)
         packet = router.route()
 
@@ -61,6 +63,7 @@ class GatewayListener:
                         properties=pika.BasicProperties(
                             correlation_id=other_socket),
                         body=body)
+                    self.conn_db.delete(conn.get_id())
 
             self.conn_db.add(conn)
             packet = router.authenticating()

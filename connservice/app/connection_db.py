@@ -17,23 +17,23 @@ CREATE_TABLE = """
 """
 
 DELETE = """
-    DELETE FROM connection 
-    WHERE id = %s
+    DELETE FROM connection C
+    WHERE C.id = %s
 """
 
 DELETE_BY_SOCKET = """
-    DELETE FROM connection 
-    WHERE socket = %s AND reply_queue = %s
+    DELETE FROM connection C
+    WHERE C.socket = %s AND C.reply_queue = %s
 """
 
 SELECT = """
-    SELECT * FROM connection
-    WHERE id = %s
+    SELECT * FROM connection C
+    WHERE C.id = %s
 """
 
 SELECT_BY_SOCKET = """
-    SELECT * FROM connection
-    WHERE socket = %s AND reply_queue = %s
+    SELECT * FROM connection C
+    WHERE C.socket = %s AND C.reply_queue = %s
 """
 
 insert_keys = ['id', 'random_id', 'socket', 'reply_queue', 'method', 'email']
@@ -41,6 +41,12 @@ insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO connection ({", ".join(insert_keys)})
     VALUES ({insert_values})
+"""
+
+UPDATE_EMAIL = """
+    UPDATE connection
+    SET email = %s
+    WHERE id = %s
 """
 
 class ConnectionDB:
@@ -57,7 +63,7 @@ class ConnectionDB:
 
     def delete(self, cid):
         cursor = self.connection.cursor()
-        cursor.execute(DELETE, cid)
+        cursor.execute(DELETE, (cid,))
 
     def delete_by_socket(self, socket, reply_queue):
         cursor = self.connection.cursor()
@@ -65,7 +71,7 @@ class ConnectionDB:
 
     def get(self, cid):
         cursor = self.connection.cursor()
-        cursor.execute(SELECT, cid)
+        cursor.execute(SELECT, (cid,))
         result = cursor.fetchone()
         if not result: return None
         return connection.Connection(result)
@@ -74,9 +80,8 @@ class ConnectionDB:
         cursor = self.connection.cursor()
         cursor.execute(SELECT_BY_SOCKET, (socket, reply_queue))
         result = cursor.fetchone()
-        print(result)
         if not result:
-            result = (None, None, "asdf", "asdf", None, None)
+            result = (None, False, socket, reply_queue, None, None)
         return connection.Connection(result)
 
     def add(self, conn):
@@ -84,14 +89,15 @@ class ConnectionDB:
             while True:
                 conn.generate_id(23)
                 cursor = self.connection.cursor()
-                cursor.execute(SELECT, conn.id)
+                cursor.execute(SELECT, (conn.id,))
                 if not cursor.fetchone(): break
-        else:
-            cursor = self.connection.cursor()
-            cursor.execute(SELECT, conn.id)
 
-
+        cursor = self.connection.cursor()
         cursor.execute(INSERT, conn.get_db_row())
+
+    def update_email(self, conn):
+        cursor = self.connection.cursor()
+        cursor.execute(UPDATE_EMAIL, (conn.get_email(), conn.get_id()))
 
     def close(self):
         self.connection.close()
@@ -101,13 +107,22 @@ class ConnectionDB:
         
 if __name__ == '__main__':
     DB_NAME = os.environ.get('DB_NAME', 'mydb')
-    DB_USER = os.environ.get('DB_USER', '')
-    DB_PASS = os.environ.get('DB_PASS', '')
-    DB_HOST = os.environ.get('DB_HOST', 'localhost')
-
+    DB_USER = os.environ.get('DB_USER', 'root')
+    DB_PASS = os.environ.get('DB_PASS', 'root')
+    DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
     db = ConnectionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
-    conn = db.get_by_socket("rew", "asdf")
-    conn.set_method("OAuth2.0")
-    db.add(conn)
-    conn = db.get_by_socket("rew", "asdf")
+
+    conn = db.get_by_socket("123", "432")
+    # conn.set_method("OAuth2.0")
+    # conn.set_id("clientjkl")
+    # db.add(conn)
+    db.delete(conn.get_id())
+
+    
+    # # db.get(conn.get_id())
+    # db.add(conn)
+    # conn = db.get_by_socket("123", "432")
+    # print(conn.get_id())
+    # db.delete(conn.get_id())
+
     db.close()

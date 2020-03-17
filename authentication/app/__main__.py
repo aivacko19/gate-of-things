@@ -1,9 +1,13 @@
 import sys
 import os
+import logging
 
 from request_uri_server import RequestUriRpcServer
 from ssl_listener import app
 import auth_publisher
+
+
+logging.basicConfig(level=logging.INFO)
 
 RABBITMQ = os.environ.get('RABBITMQ', "localhost")
 if not RABBITMQ:
@@ -17,7 +21,7 @@ RECEPIENT = os.environ.get('RECEPIENT')
 if not RECEPIENT:
     sys.exit(1)
 
-auth_publisher.publisher = auth_publisher.AuthenticationPublisher(RABBITMQ, RECEPIENT)
+auth_publisher.AuthenticationPublisher.initInstance(RABBITMQ, RECEPIENT)
 uri_server = RequestUriRpcServer(RABBITMQ, QUEUE, REDIRECT_URI)
 uri_server.run()
 app.run(host=HOST, ssl_context="adhoc")

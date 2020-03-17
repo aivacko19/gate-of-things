@@ -17,6 +17,8 @@ import mailer
 #     print("usage:", sys.argv[0], "<rabbitmq_host>")
 #     sys.exit(1)
 
+logging.basicConfig(level=logging.INFO)
+
 RABBITMQ = os.environ.get('RABBITMQ')
 if not RABBITMQ:
     sys.exit(1)

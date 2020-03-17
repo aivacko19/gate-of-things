@@ -5,7 +5,7 @@ import flask
 import requests
 
 from providers import google as provider
-from auth_publisher import publisher
+from auth_publisher import AuthenticationPublisher
 
 app = flask.Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
@@ -36,17 +36,17 @@ def index():
 
     # Get User Info with Token
     userinfo_endpoint = provider_cfg["userinfo_endpoint"]
-    uri, headers, body = client.add_token(userinfo_endpoint)
+    uri, headers, body = provider.client.add_token(userinfo_endpoint)
     userinfo = requests.get(uri, headers=headers, data=body).json()
 
     if not userinfo.get("email_verified"):
-        publisher.publish(user_reference)
+        AuthenticationPublisher.getInstance().publish(user_reference)
         return "User email not available or not verified by Google.", 400
 
     email = userinfo["email"]
-    publisher.publish(user_reference, email)
+    AuthenticationPublisher.getInstance().publish(user_reference, email)
     
     return (
-        "<p>You're logged in! Email: {}</p>"
+        "<p>You logged in! You're a Legend! Email: {}</p>"
         "<p>Check your MQTT Connection</p>".format(email)
     )

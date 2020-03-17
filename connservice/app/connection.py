@@ -38,6 +38,12 @@ class Connection:
     def get_socket(self):
         return self.socket, self.reply_queue
 
+    def get_email(self):
+        return self.email
+
+    def set_id(self, cid):
+        self.id = cid
+
     def set_random_id(self, random_id):
         self.random_id = random_id
 

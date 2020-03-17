@@ -3,16 +3,25 @@ import uuid
 import os
 import sys
 
-oauth_client = None
+class RequestUriRpcClient:
 
-class RequestUriRpcClient(object):
+    __instance = None
+
+    @staticmethod
+    def initInstance(rabbitmq, remote_server):
+        RequestUriRpcClient.__instance = RequestUriRpcClient(rabbitmq, remote_server)
+
+    @staticmethod
+    def getInstance():
+        return RequestUriRpcClient.__instance
 
     def __init__(self, rabbitmq, remote_server):
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=rabbitmq,
                 connection_attempts=10,
-                retry_delay=5,))
+                retry_delay=5,
+                heartbeat=0,))
         self.channel = self.connection.channel()
         self.server = remote_server
 
@@ -39,5 +48,5 @@ class RequestUriRpcClient(object):
                 correlation_id=self.corr_id,),
             body=user_reference)
         while self.response is None:
-            self.connection.process_data_events()
+            self.connection.process_data_events(time_limit=2)
         return self.response

@@ -10,6 +10,7 @@ CREATE_TABLE = """
         random_id BOOLEAN DEFAULT FALSE,
         socket VARCHAR(40),
         reply_queue VARCHAR(40),
+        clean_start BOOLEAN DEFAULT FALSE,
         method VARCHAR(100),
         email VARCHAR(100) NULL,
         CONSTRAINT index_socket_reply UNIQUE (socket, reply_queue)
@@ -36,7 +37,7 @@ SELECT_BY_SOCKET = """
     WHERE C.socket = %s AND C.reply_queue = %s
 """
 
-insert_keys = ['id', 'random_id', 'socket', 'reply_queue', 'method', 'email']
+insert_keys = ['id', 'random_id', 'socket', 'reply_queue', 'clean_start', 'method', 'email']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO connection ({", ".join(insert_keys)})
@@ -50,6 +51,19 @@ UPDATE_EMAIL = """
 """
 
 class ConnectionDB:
+
+    __instance = None
+
+    @staticmethod
+    def getInstance():
+        if not ConnectionDB.__instance:
+            DB_NAME = os.environ.get('DB_NAME', 'mydb')
+            DB_USER = os.environ.get('DB_USER', 'root')
+            DB_PASS = os.environ.get('DB_PASS', 'root')
+            DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
+            ConnectionDB.__instance = ConnectionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
+
+        return ConnectionDB.__instance
 
     def __init__(self, db_name, db_user, db_password, db_host):
         self.connection = psycopg2.connect(
@@ -81,7 +95,7 @@ class ConnectionDB:
         cursor.execute(SELECT_BY_SOCKET, (socket, reply_queue))
         result = cursor.fetchone()
         if not result:
-            result = (None, False, socket, reply_queue, None, None)
+            result = (None, False, socket, reply_queue, False, None, None)
         return connection.Connection(result)
 
     def add(self, conn):

@@ -5,9 +5,12 @@ import json
 
 import const
 
+from session_request import SesisonPublisher
+from connection_db import ConnectionDB
+
 class OAuthListener:
 
-    def __init__(self, rabbitmq, listener, connection_db):
+    def __init__(self, rabbitmq, listener):
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(
                 host=rabbitmq,
@@ -23,16 +26,17 @@ class OAuthListener:
         self.thread = threading.Thread(
             target=self.channel.start_consuming,
             daemon=True)
-        self.conn_db = connection_db
         logging.info(f"Created OAuthListener listening on queue {listener}")
 
     def on_response(self, ch, method, props, body):
+        publisher = SessionPublisher.getInstance()
+        conn_db = ConnectionDB.getInstance()
         try:
             logging.info("Start verification")
             email = body.decode("utf-8")
             client_id = props.correlation_id
             logging.info(f"Email: {email}, client_id: {client_id}")
-            conn = self.conn_db.get(client_id)
+            conn = conn_db.get(client_id)
 
             packet = {'commands': {'write': True}}
             if email == 'none':
@@ -61,13 +65,17 @@ class OAuthListener:
             if email == 'none': return
 
             conn.set_email(email)
-            self.conn_db.update_email(conn)
+            conn_db.update_email(conn)
+            packet = {
+                'email': email,
+                'clean_start': conn.get_clean_start()}
             if conn.verified():
                 # Check subscription authorization
                 pass
             else:
-                # Create new Session
                 pass
+                
+            publisher.publish(conn.get_id(), packet)
         except Exception as e:
             logging.error(e)
         

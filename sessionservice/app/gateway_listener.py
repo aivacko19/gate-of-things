@@ -3,11 +3,8 @@ import logging
 import threading
 
 import pika
-
-import bytescoder
-import request_router
-import const
-from connection_db import ConnectionDB
+from session import Session
+from sesison_db import SessionDB
 
 class GatewayListener:
 
@@ -29,26 +26,40 @@ class GatewayListener:
             daemon=True)
 
     def on_response(self, ch, method, props, body):
-        conn_db = ConnectionDB.getInstance()
+        session_db = SessionDB.getInstance()
         # logging.info(f"Received: {body}")
         packet = json.loads(body, object_hook=bytescoder.as_bytes)
 
         reply_queue = props.reply_to
-        socket = props.correlation_id
+        cid = props.correlation_id
+
+        session = session_db.get(cid)
+        if not session or packet.get('clean_start'):
+            email = packet.get('email')
+            session_db.add(Session((cid, email)))
+            return
+
+        if 'email' in packet:
+            # Check subs authorization
+            return
+
+        ptype = packet.get('type')
+        if ptype in ['subscribe, un']
+
 
         if packet.get('disconnect'):
             # logging.info(f"Disconnecting client {socket}")
-            conn_db.delete_by_socket(socket, reply_queue)
+            self.conn_db.delete_by_socket(socket, reply_queue)
             return
 
-        conn = conn_db.get_by_socket(socket, reply_queue)
+        conn = self.conn_db.get_by_socket(socket, reply_queue)
         logging.info(f"Connection info: id={conn.get_id()}, email={conn.get_email()}")
         router = request_router.RequestRouter(conn, packet)
         packet = router.route()
 
         if not packet:
             if not conn.get_random_id():
-                other_conn = conn_db.get(conn.get_id())
+                other_conn = self.conn_db.get(conn.get_id())
                 if other_conn:
                     other_socket, other_reply_queue = other_conn.get_socket()
                     packet = {
@@ -64,9 +75,9 @@ class GatewayListener:
                         properties=pika.BasicProperties(
                             correlation_id=other_socket),
                         body=body)
-                    conn_db.delete(conn.get_id())
+                    self.conn_db.delete(conn.get_id())
 
-            conn_db.add(conn)
+            self.conn_db.add(conn)
             packet = router.authenticating()
 
         body = json.dumps(packet, cls=bytescoder.BytesEncoder)

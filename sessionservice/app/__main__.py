@@ -9,10 +9,19 @@ import threading
 
 import gateway_listener
 import oauth_response
+import connection_db
 import request_uri_client
 
 
 logging.basicConfig(level=logging.INFO)
+
+
+DB_NAME = os.environ.get('DB_NAME')
+DB_USER = os.environ.get('DB_USER')
+DB_PASS = os.environ.get('DB_PASS')
+DB_HOST = os.environ.get('DB_HOST')
+
+db = connection_db.ConnectionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
 
 RABBITMQ = os.environ.get('RABBITMQ', 'localhost')
 GATEWAY_QUEUE = os.environ.get('GATEWAY_QUEUE', 'conn-service-auth')

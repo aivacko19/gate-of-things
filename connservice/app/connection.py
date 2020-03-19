@@ -9,8 +9,9 @@ class Connection:
         self.random_id = db_row[1]
         self.socket = db_row[2]
         self.reply_queue = db_row[3]
-        self.method = db_row[4]
-        self.email = db_row[5]
+        self.clean_start = db_row[4]
+        self.method = db_row[5]
+        self.email = db_row[6]
 
     def verified(self):
         return self.email is not None
@@ -23,6 +24,7 @@ class Connection:
                 self.random_id,
                 self.socket,
                 self.reply_queue,
+                self.clean_start,
                 self.method,
                 self.email,)
 
@@ -31,6 +33,11 @@ class Connection:
 
     def get_random_id(self):
         return self.random_id
+
+    def get_clean_start(self):
+        cs = self.clean_start
+        self.clean_start = False
+        return cs
 
     def get_method(self):
         return self.method
@@ -46,6 +53,9 @@ class Connection:
 
     def set_random_id(self, random_id):
         self.random_id = random_id
+
+    def set_clean_start(self, clean_start):
+        self.clean_start = clean_start
 
     def set_method(self, method):
         self.method = method

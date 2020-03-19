@@ -6,7 +6,8 @@ from session import Session
 
 CREATE_TABLE = """
     CREATE TABLE IF NOT EXISTS session (
-        id VARCHAR(23) PRIMARY KEY,
+        id SERIAL PRIMARY KEY,
+        cid VARCHAR(23) UNIQUE,
         email VARCHAR(100)
     );
     CREATE TABLE IF NOT EXISTS subscription (
@@ -97,9 +98,9 @@ class SessionDB:
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)
 
-    def delete(self, cid):
+    def delete(self, session):
         cursor = self.connection.cursor()
-        cursor.execute(DELETE, (cid,))
+        cursor.execute(DELETE, (session.get_id(),))
 
     def get(self, cid):
         cursor = self.connection.cursor()
@@ -153,9 +154,6 @@ class SessionDB:
 
     def close(self):
         self.connection.close()
-
-
-
         
 if __name__ == '__main__':
     DB_NAME = os.environ.get('DB_NAME', 'mydb')

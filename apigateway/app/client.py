@@ -2,57 +2,42 @@ import time
 import socket
 import json
 import sys
+import threading
 
 from protocols import mqtt as protocol
+import bytescoder
 
-def write(socket, stream):
-    try:
-        # Should be ready to write
-        sent = socket.send(stream.output(4096))
-    except BlockingIOError:
-        # Resource temporarily unavailable (errno EWOULDBLOCK)
-        pass
-    else:
-        stream.update(sent)
+if (__name__) == '__main__':
 
-def read(socket, stream):
-    try:
-        # Should be ready to read
-        data = socket.recv(4096)
-    except BlockingIOError:
-        # Resource temporarily unavailable (errno EWOULDBLOCK)
-        pass
-    else:
-        if data:
-            stream.load(data)
-        else:
-            raise RuntimeError("Peer closed.")
-while True:
-
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect_ex(('192.168.99.100', protocol.port))
-
-    body = input("Insert Packet: ")
-    print(body)
-    packet = json.loads(body)
-    while body != "exit":
-        stream = protocol.compose(packet)
-        print(stream.output(4096))
-        while True:
-            write(sock, stream)
-            if stream.empty():
-                break
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.connect_ex(('192.168.99.100', 1887))
+        sock.settimeout(15)
 
         while True:
-            read(sock, stream)
-            if not stream.is_loading():
-                break
-        print(stream.output(4096))
-        packet = protocol.parse(stream)
-        body = json.dumps(packet)
-        print(body)
-        body = input("Insert Packet: ")
-        packet = json.loads(body)
+            body = input("Insert Packet: ")
+            if body == 'exit': break
+            if body != 'pass':
+                packet = json.loads(body) #, object_hook=bytescoder.as_bytes)
+                stream = protocol.compose(packet)
 
-    sock.close()
+                while not stream.empty():
+                    data = stream.output(4096)
+                    print(data)
+                    sent = sock.send(data)
+                    stream.update(sent)
+
+            stream = protocol.new_stream()
+            while stream.empty() or stream.still_loading():
+                data = sock.recv(4096)
+                if not data: raise RuntimeError("Server closed.")
+                print(data)
+                stream.append(data)
+                stream.load()
+
+            packet = protocol.parser.read(stream)
+            body = json.dumps(packet, cls=bytescoder.BytesEncoder)
+            print(body)
+
+            
+
 

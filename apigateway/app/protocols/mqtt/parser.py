@@ -59,6 +59,9 @@ def read(stream):
     except ProtocolError as e: 
         packet['error'] = PROTOCOL_ERROR
         logging.error(repr(e))
+    except UnicodeDecodeError as e:
+        packet['error'] = PAYLOAD_FORMAT_INVALID
+        logging.error(repr(e))
     except Exception as e:
         packet['error'] = UNSPECIFIED_ERROR
         logging.error(repr(e))
@@ -71,6 +74,11 @@ def read_pub_packet(packet, stream):
         packet['id'] = stream.get_int()
     packet['properties'] = get_properties(stream, packet['type'])
     packet['payload'] = stream.dump()
+    if 'payload_format_indicator' in packet['properties']:
+        pfi = packet['properties']['payload_format_indicator']
+        if pfi == 1:
+            message['payload'].decode('utf-8')
+
 
 def read_sub_packet(packet, stream):
     logging.info("Parsing SUB packet")
@@ -167,7 +175,7 @@ def get_properties(stream, packet_type):
 
 #==========================+++++++++++++++++++==========================
 #                          +++++         +++++
-#                          +++++ CONSUME +++++
+#                          +++++ COMPOSE +++++
 #                          +++++         +++++
 #==========================+++++++++++++++++++==========================
 
@@ -186,23 +194,23 @@ def write(packet, stream):
         write_connect_packet(packet, stream)
     elif packet_type not in [PINGREQ, PINGRESP]:
         if packet_type == CONNACK:
-            stream.put_connack_flags(packet['session_present'])
+            stream.put_connack_flags(packet.get('session_present', False))
         if packet_type in [PUBACK, PUBREC, PUBREL, PUBCOMP]:
             stream.put_int(packet['id'])
         stream.put_byte(packet["code"])
-        put_properties(stream, packet["properties"])
+        put_properties(stream, packet.get('properties', {}))
     stream.put_header(packet_type)
 
 def write_pub_packet(packet, stream):
     stream.put_string(packet['topic'])
     if packet['qos'] > 0:
         stream.put_int(packet['id'])
-    put_properties(stream, packet["properties"])
-    stream.append(packet["payload"])
+    put_properties(stream, packet.get('properties', {}))
+    stream.append(packet.get('payload', b""))
 
 def write_sub_packet(packet, stream):
     stream.put_int(packet['id'])
-    put_properties(stream, packet["properties"])
+    put_properties(stream, packet.get('properties', {}))
     for topic in packet['topics']:
         if packet['type'] in [SUBSCRIBE, UNSUBSCRIBE]:
             stream.put_string(topic['filter'])
@@ -228,7 +236,7 @@ def write_connect_packet(packet, stream):
     stream.put_connect_flags(username_flag, password_flag, 
         retain, qos, will_flag, clean_start)
     stream.put_int(packet['keep_alive'])
-    put_properties(stream, packet["properties"])
+    put_properties(stream, packet.get('properties', {}))
     stream.put_string(packet['client_id'])
     if will_flag:
         put_properties(stream, packet["will"]["properties"])

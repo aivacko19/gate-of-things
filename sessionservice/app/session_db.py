@@ -2,6 +2,7 @@ import psycopg2
 from psycopg2 import OperationalError
 import os
 from session import Session
+from session import Subscription
 
 
 CREATE_TABLE = """
@@ -29,9 +30,23 @@ DELETE = """
     WHERE id = %s
 """
 
+DELETE_SUB = """
+    DELETE FROM subscription
+    WHERE session_id = %s
+    AND topic_filter = %s
+"""
+
 SELECT = """
     SELECT * FROM session
     WHERE id = %s
+"""
+
+SELECT_SUB = """
+    SELECT topic_filter, subscription_id, max_qos, 
+    no_local, retain_as_published, retain_handling 
+    FROM subscription
+    WHERE session_id = %s
+    AND topic_filter = %s
 """
 
 SELECT_SUBS = """
@@ -102,6 +117,10 @@ class SessionDB:
         cursor = self.connection.cursor()
         cursor.execute(DELETE, (session.get_id(),))
 
+    def delete_sub(self, session, sub):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_SUB, (session.get_id(), sub.get_topic_filter()))
+
     def get(self, cid):
         cursor = self.connection.cursor()
         cursor.execute(SELECT, (cid,))
@@ -112,14 +131,15 @@ class SessionDB:
         cursor.execute(SELECT_SUBS, (cid,))
         result = cursor.fetchall()
         for sub in result:
-            session.add_sub({
-                'topic_filter': sub[0],
-                'subscription_id': sub[1],
-                'max_qos': sub[2],
-                'no_local': sub[3],
-                'retain_as_published': sub[4],
-                'retain_handling': sub[5]})
+            session.add_sub(Subscription(db_row=sub))
         return session
+
+    def get_sub(self, session, topic_filter):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_SUB, (session.get_id(), topic_filter))
+        result = cursor.fetchone()
+        if not result: return None
+        return Subscription(db_row=result)
 
 
     def add(self, session):
@@ -127,15 +147,22 @@ class SessionDB:
         cursor.execute(INSERT, session.get_db_row())
 
     def add_sub(self, session, sub):
+        exists = self.get_sub(session, sub)
+        if exists:
+            self.update_sub(session, sub)
+        else:
+            self.insert_sub(session, sub)
+
+    def insert_sub(self, session, sub):
         cursor = self.connection.cursor()
         cursor.execute(INSERT_SUB, (
             session.get_id(),
-            sub['topic_filter'],
-            sub['subscription_id'],
-            sub['max_qos'],
-            sub['no_local'],
-            sub['retain_as_published'],
-            sub['retain_handling'],))
+            sub.get_topic_filter(),
+            sub.get_sub_id(),
+            sub.get_max_qos(),
+            sub.get_no_local(),
+            sub.get_retain_as_published(),
+            sub.get_retain_handling(),))
 
     def update_email(self, session):
         cursor = self.connection.cursor()
@@ -144,13 +171,13 @@ class SessionDB:
     def update_sub(self, session, sub):
         cursor = self.connection.cursor()
         cursor.execute(UPDATE_SUB, (
-            sub['subscription_id'],
-            sub['max_qos'],
-            sub['no_local'],
-            sub['retain_as_published'],
-            sub['retain_handling']),
+            sub.get_sub_id(),
+            sub.get_max_qos(),
+            sub.get_no_local(),
+            sub.get_retain_as_published(),
+            sub.get_retain_handling(),
             session.get_id(),
-            sub['topic_filter'],)
+            sub.get_topic_filter(),))
 
     def close(self):
         self.connection.close()

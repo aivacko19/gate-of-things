@@ -40,6 +40,7 @@ class GatewayListener:
         pack = pack_db.get(cid, pid)
 
         if ptype in ['subscribe', 'unsubscribe']:
+            pack = pack_db.get(cid, pid)
             if pack:
                 new_packet = {
                     'type': 'suback' if ptype == 'subscribe' else 'unsuback',
@@ -49,15 +50,9 @@ class GatewayListener:
                     new_packet['topics'].append({
                         'code': const.PACKET_IDENTIFIER_IN_USE})
                 body = json.dumps(new_packet, cls=bytescoder.BytesEncoder)
-                ch.basic_publish(
-                    exchange='',
-                    routing_key='',
-                    properties=pika.BasicProperties(
-                        correlation_id=cid),
-                    body=body)
-                return
+            else:
+                pack_db.add(cid, pid, ptype)
 
-            pack_db.add(cid, pid, ptype)
             ch.basic_publish(
                 exchange='',
                 routing_key='',
@@ -65,61 +60,6 @@ class GatewayListener:
                     correlation_id=cid),
                 body=body)
             return
-
-        session = session_db.get(cid)
-        if not session or packet.get('clean_start'):
-            email = packet.get('email')
-            session_db.add(Session((cid, email)))
-            return
-
-        if 'email' in packet:
-            # Check subs authorization
-            return
-
-        ptype = packet.get('type')
-        if ptype in ['subscribe, un']
-
-
-        if packet.get('disconnect'):
-            # logging.info(f"Disconnecting client {socket}")
-            self.conn_db.delete_by_socket(socket, reply_queue)
-            return
-
-        conn = self.conn_db.get_by_socket(socket, reply_queue)
-        logging.info(f"Connection info: id={conn.get_id()}, email={conn.get_email()}")
-        router = request_router.RequestRouter(conn, packet)
-        packet = router.route()
-
-        if not packet:
-            if not conn.get_random_id():
-                other_conn = self.conn_db.get(conn.get_id())
-                if other_conn:
-                    other_socket, other_reply_queue = other_conn.get_socket()
-                    packet = {
-                        'type': 'disconnect',
-                        'code': const.SESSION_TAKEN_OVER,
-                        'commands' : {
-                            'write': True,
-                            'disconnect': True}}
-                    body = json.dumps(packet, cls=bytescoder.BytesEncoder)
-                    ch.basic_publish(
-                        exchange='',
-                        routing_key=other_reply_queue,
-                        properties=pika.BasicProperties(
-                            correlation_id=other_socket),
-                        body=body)
-                    self.conn_db.delete(conn.get_id())
-
-            self.conn_db.add(conn)
-            packet = router.authenticating()
-
-        body = json.dumps(packet, cls=bytescoder.BytesEncoder)
-        ch.basic_publish(
-            exchange='',
-            routing_key=reply_queue,
-            properties=pika.BasicProperties(
-                correlation_id=socket),
-            body=body)
         
     def run(self):
         # self.thread.start()

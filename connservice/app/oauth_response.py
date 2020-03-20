@@ -5,7 +5,7 @@ import json
 
 import const
 
-from session_request import SesisonPublisher
+from session_proxy import SesisonProxy
 from connection_db import ConnectionDB
 
 class OAuthListener:
@@ -29,7 +29,7 @@ class OAuthListener:
         logging.info(f"Created OAuthListener listening on queue {listener}")
 
     def on_response(self, ch, method, props, body):
-        publisher = SessionPublisher.getInstance()
+        session_proxy = SessionProxy.getInstance()
         conn_db = ConnectionDB.getInstance()
         try:
             logging.info("Start verification")
@@ -38,20 +38,37 @@ class OAuthListener:
             logging.info(f"Email: {email}, client_id: {client_id}")
             conn = conn_db.get(client_id)
 
-            packet = {'commands': {'write': True}}
+            packet = {'commands': {'write': True}, 'properties': {}}
             if email == 'none':
                 packet['type'] = 'disconnect' if conn.verified() else 'connack'
                 packet['code'] = const.NOT_AUTHORIZED
                 packet['commands']['disconnect'] = True
             else:
-                packet['type'] = 'auth' if conn.verified() else 'connack'
                 packet['code'] = const.SUCCESS
                 packet['commands']['read'] = True
-                packet['properties'] = {}
                 if conn.verified():
+                    packet['type'] = 'auth'
                     packet['properties']['authentication_method'] = 'OAuth2.0'
-                elif conn.get_random_id():
-                    packet['properties']['assigned_client_identifier'] = conn.get_id()
+                    if conn.get_email() != email:
+                        session_proxy.publish('reauth', conn.get_id(), email)
+                else:
+                    packet['type'] = 'connack'
+
+                    session = session_proxy.get(conn.get_id())
+                    if session and not conn.get_clean_start():
+                        packet['session_present'] = True
+                        if session.get('email') != email:
+                            session_proxy.reauth(conn.get_id(), email)
+                    else:
+                        packet['session_present'] = False
+                        session_proxy.add(conn.get_id(), email)
+
+                    if conn.get_random_id():
+                        packet['properties']['assigned_client_identifier'] = conn.get_id()
+
+            if email:
+                conn.set_email(email)
+                conn_db.update_email(conn)
 
             socket, reply_queue = conn.get_socket()
             body = json.dumps(packet)
@@ -62,20 +79,6 @@ class OAuthListener:
                     correlation_id=socket,),
                 body=body)
 
-            if email == 'none': return
-
-            conn.set_email(email)
-            conn_db.update_email(conn)
-            packet = {
-                'email': email,
-                'clean_start': conn.get_clean_start()}
-            if conn.verified():
-                # Check subscription authorization
-                pass
-            else:
-                pass
-                
-            publisher.publish(conn.get_id(), packet)
         except Exception as e:
             logging.error(e)
         

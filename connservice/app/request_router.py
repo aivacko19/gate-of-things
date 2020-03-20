@@ -1,6 +1,7 @@
 import logging
 import const
 from request_uri_client import RequestUriRpcClient
+from sub_proxy import SubscriptionProxy
 
 class RequestRouter:
     def __init__(self, connection, packet):
@@ -61,12 +62,10 @@ class RequestRouter:
                     new_packet['code'] = const.BAD_AUTHENTICATION_METHOD
                 else:
                     new_packet = self.authenticating()
+            elif self.type in ['subscribe', 'unsubscribe']:
+                new_packet = self.subscribing()
             else:
                 new_packet['commands']['read'] = True
-                if self.type in ['subscribe', 'unsubscribe']:
-                    self.subscription()
-                else:
-                    self.publishing()
         return new_packet
 
     def connect(self):
@@ -75,6 +74,26 @@ class RequestRouter:
         self.connection.set_method(method)
         if not client_id: self.connection.set_random_id(True)
         self.connection.set_id(client_id)
+
+    def subscribing(self):
+        # pack = pack_db.get(cid, pid)
+        # if pack:
+        #     new_packet = {
+        #         'type': 'suback' if ptype == 'subscribe' else 'unsuback',
+        #         'topics': list()
+        #     }
+        #     for t in packet.get('topics'):
+        #         new_packet['topics'].append({
+        #             'code': const.PACKET_IDENTIFIER_IN_USE})
+        #     body = json.dumps(new_packet, cls=bytescoder.BytesEncoder)
+        # else:
+        #     pack_db.add(cid, pid, ptype)
+
+        SubscriptionProxy.getInstance().publish(
+            self.connection.get_id(), 
+            self.packet)
+
+        return {'commands': {'read': True}}
 
     def publish(self):
         message = {
@@ -96,31 +115,6 @@ class RequestRouter:
         # publishing(message)
 
         return {'read': True}
-
-    def qosing(self):
-
-        return {'read': True}
-
-
-    def subscribe(self):
-        sub_packet = {
-            'client_id': self.connection.id,
-            'packet_id': self.packet['id'],
-            'subscriptions': self.packet['topics']
-        }
-        if 'subscription_identifier' in packet:
-            sub_packet['sub_id'] = packet['subscription_identifier']
-
-        # subscribing(sub_packet)
-
-    def unsubscribe(self):
-        sub_packet = {
-            'client_id': self.connection.id,
-            'packet_id': self.packet['id'],
-            'subscriptions': self.packet['topics']
-        }
-
-        # unsubscribing(unsub_packet)
 
     def authenticating(self):
         method = self.connection.get_method()

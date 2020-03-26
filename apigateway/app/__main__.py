@@ -1,33 +1,31 @@
 #!/usr/bin/env python3
 
-import sys
-import pika
-import queue
-import threading
-import logging
-import time
 import os
+import logging
+import traceback
 
 import gateway
+from inbox_service import InboxService
 from protocols import mqtt as protocol
-import mailer
 
 
 # if len(sys.argv) != 2:
 #     print("usage:", sys.argv[0], "<rabbitmq_host>")
 #     sys.exit(1)
 
-logging.basicConfig(level=logging.INFO)
+LOGGER = logging.getLogger(__name__)
+LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %(message)s')
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
-RABBITMQ = os.environ.get('RABBITMQ')
-if not RABBITMQ:
-    sys.exit(1)
 MY_HOSTNAME = os.getenv('HOST', 'localhost')
-SERVICE_NAME = os.environ.get('GATEWAY_REMOTE')
 
-mail = mailer.Mail(RABBITMQ, SERVICE_NAME)
-mail.start()
+my_agent = InboxService()
+my_agent.start()
 
-api_gateway = gateway.Gateway(MY_HOSTNAME, protocol, mail)
-api_gateway.start_listening()
-api_gateway.close()
+api_gateway = gateway.Gateway(MY_HOSTNAME, protocol, my_agent)
+try:
+    api_gateway.start_listening()
+except Exception as e:
+    LOGGER.error(traceback.format_exc())
+    api_gateway.close()
+    my_agent.close()

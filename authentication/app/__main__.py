@@ -1,27 +1,29 @@
-import sys
+#!/usr/bin/env python3
+
 import os
 import logging
 
-from request_uri_server import RequestUriRpcServer
-from ssl_listener import app
-import auth_publisher
+from oauth_uri_service import OAuthUriService
+from oauth_userinfo_service import app as userinfo_service
 
+LOGGER = logging.getLogger(__name__)
+LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %(message)s')
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
-logging.basicConfig(level=logging.INFO)
+env = {
+    'OAUTH_URI_SERVICE': None,
+    'REDIRECT_URI': None
+}
 
-RABBITMQ = os.environ.get('RABBITMQ', "localhost")
-if not RABBITMQ:
-    sys.exit(1)
-QUEUE = os.environ.get('QUEUE', "auth-service")
-if not QUEUE:
-    sys.exit(1)
-REDIRECT_URI = os.environ.get("REDIRECT_URI", "https://127.0.0.1:5000/")
+for key in env:
+    service = os.environ.get(key)
+    if not service:
+        raise Exception('Environment variable %s not defined', key)
+    env[key] = service
+
 HOST = os.environ.get("HOST", "localhost")
-RECEPIENT = os.environ.get('RECEPIENT')
-if not RECEPIENT:
-    sys.exit(1)
 
-auth_publisher.AuthenticationPublisher.initInstance(RABBITMQ, RECEPIENT)
-uri_server = RequestUriRpcServer(RABBITMQ, QUEUE, REDIRECT_URI)
-uri_server.run()
-app.run(host=HOST, ssl_context="adhoc")
+uri_service = OAuthUriService(env['OAUTH_URI_SERVICE'], env['REDIRECT_URI'])
+uri_service.start()
+userinfo_service.run(host=HOST, ssl_context="adhoc")
+uri_server.close()

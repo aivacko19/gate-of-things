@@ -1,8 +1,9 @@
 import psycopg2
 from psycopg2 import OperationalError
 import os
-from session import Session
-from session import Subscription
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 CREATE_TABLE = """
@@ -13,14 +14,14 @@ CREATE_TABLE = """
     );
     CREATE TABLE IF NOT EXISTS subscription (
         id SERIAL PRIMARY KEY,
-        session_id VARCHAR(23),
+        session_id INTEGER,
         topic_filter VARCHAR(40),
         subscription_id INTEGER,
         max_qos INTEGER CHECK (max_qos BETWEEN 0 AND 2),
         no_local BOOLEAN,
         retain_as_published BOOLEAN,
         retain_handling INTEGER CHECK (retain_handling BETWEEN 0 AND 2),
-        UNIQUE (session_id, topic_filter)
+        UNIQUE (session_id, topic_filter),
         FOREIGN KEY (session_id) REFERENCES session ON DELETE CASCADE
     );
 """
@@ -38,7 +39,7 @@ DELETE_SUB = """
 
 SELECT = """
     SELECT * FROM session
-    WHERE id = %s
+    WHERE cid = %s
 """
 
 SELECT_SUB = """
@@ -56,7 +57,7 @@ SELECT_SUBS = """
     WHERE session_id = %s
 """
 
-insert_keys = ['id', 'email']
+insert_keys = ['cid', 'email']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO session ({", ".join(insert_keys)})
@@ -71,7 +72,7 @@ INSERT_SUB = f"""
     VALUES ({insert_values})
 """
 
-UPDATE_EMAIL = """
+UPDATE = """
     UPDATE session
     SET email = %s
     WHERE id = %s
@@ -79,11 +80,11 @@ UPDATE_EMAIL = """
 
 UPDATE_SUB = """
     UPDATE subscription
-    SET subscription_filter = %s,
+    SET subscription_id = %s,
     max_qos = %s,
     no_local = %s,
     retain_as_published = %s,
-    retain_handling = %s,
+    retain_handling = %s
     WHERE session_id = %s
     AND topic_filter = %s
 """
@@ -123,12 +124,14 @@ class SessionDB:
 
     def get(self, cid):
         cursor = self.connection.cursor()
+        LOGGER.info('Executing SELECT statement for table "session"')
         cursor.execute(SELECT, (cid,))
         result = cursor.fetchone()
         if not result: return None
         session = Session(result)
         cursor = self.connection.cursor()
-        cursor.execute(SELECT_SUBS, (cid,))
+        LOGGER.info('Executing SELECT statement for table "subscription')
+        cursor.execute(SELECT_SUBS, (session.get_id(),))
         result = cursor.fetchall()
         for sub in result:
             session.add_sub(Subscription(db_row=sub))
@@ -142,12 +145,12 @@ class SessionDB:
         return Subscription(db_row=result)
 
 
-    def add(self, session):
+    def add(self, cid, email):
         cursor = self.connection.cursor()
-        cursor.execute(INSERT, session.get_db_row())
+        cursor.execute(INSERT, (cid, email))
 
     def add_sub(self, session, sub):
-        exists = self.get_sub(session, sub)
+        exists = self.get_sub(session, sub['filter'])
         if exists:
             self.update_sub(session, sub)
         else:
@@ -157,30 +160,98 @@ class SessionDB:
         cursor = self.connection.cursor()
         cursor.execute(INSERT_SUB, (
             session.get_id(),
-            sub.get_topic_filter(),
-            sub.get_sub_id(),
-            sub.get_max_qos(),
-            sub.get_no_local(),
-            sub.get_retain_as_published(),
-            sub.get_retain_handling(),))
+            sub.get('filter'),
+            sub.get('sub_id'),
+            sub.get('max_qos'),
+            sub.get('no_local'),
+            sub.get('retain_as_published'),
+            sub.get('retain_handling'),))
 
-    def update_email(self, session):
+    def update(self, session):
         cursor = self.connection.cursor()
-        cursor.execute(UPDATE_EMAIL, (session.get_email(), session.get_id()))
+        cursor.execute(UPDATE, (session.get_email(), session.get_id()))
 
     def update_sub(self, session, sub):
         cursor = self.connection.cursor()
         cursor.execute(UPDATE_SUB, (
-            sub.get_sub_id(),
-            sub.get_max_qos(),
-            sub.get_no_local(),
-            sub.get_retain_as_published(),
-            sub.get_retain_handling(),
+            sub.get('sub_id'),
+            sub.get('max_qos'),
+            sub.get('no_local'),
+            sub.get('retain_as_published'),
+            sub.get('retain_handling'),
             session.get_id(),
-            sub.get_topic_filter(),))
+            sub.get('filter'),))
 
     def close(self):
         self.connection.close()
+
+
+class Session:
+
+    def __init__(self, db_row):
+        self.id = db_row[0]
+        self.cid = db_row[1]
+        self.email = db_row[2]
+        self.subs = list()
+
+    def get_db_row(self):
+        return (self.id,
+                self.email,)
+
+    def get_id(self):
+        return self.id
+
+    def get_email(self):
+        return self.email
+
+    def set_id(self, cid):
+        self.id = cid
+
+    def set_email(self, email):
+        self.email = email
+
+    def add_sub(self, sub):
+        self.subs.append(sub)
+
+    def get_subs(self):
+        return self.subs
+
+class Subscription:
+
+    def __init__(self, db_row=None, sub_id=None, packet=None):
+        if db_row:
+            self.topic_filter = db_row[0]
+            self.sub_id = db_row[1]
+            self.max_qos = db_row[2]
+            self.no_local = db_row[3]
+            self.retain_as_published = db_row[4]
+            self.retain_handling = db_row[5]
+        else:
+            self.topic_filter = packet.get("filter")
+            self.sub_id = sub_id
+            self.max_qos = packet.get('max_qos')
+            self.no_local = packet.get('no_local')
+            self.retain_as_published = packet.get('retain_as_published')
+            self.retain_handling = packet.get('retain_handling')
+
+    def get_topic_filter(self):
+        return self.topic_filter
+
+    def get_sub_id(self):
+        return self.sub_id
+        
+    def get_max_qos(self):
+        return self.max_qos
+        
+    def get_no_local(self):
+        return self.no_local
+        
+    def get_retain_as_published(self):
+        return self.retain_as_published
+        
+    def get_retain_handling(self):
+        return self.retain_handling
+
         
 if __name__ == '__main__':
     DB_NAME = os.environ.get('DB_NAME', 'mydb')

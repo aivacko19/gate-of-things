@@ -20,7 +20,8 @@ LOGGER = logging.getLogger(__name__)
 
 env = {
     'OAUTH_URI_SERVICE': None,
-    'SUBSCRIPTION_SERVICE': None
+    'SUBSCRIPTION_SERVICE': None,
+    'PUBLISH_SERVICE': None
 }
 
 for key in env:
@@ -146,11 +147,12 @@ class RoutingService(amqp_helper.AmqpAgent):
                 response['commands']['read'] = True
 
             # Publishing
-            elif command == 'publish':
+            elif command in ['publish', 'pubrel']:
+                self.publishing(request, conn)
                 response['commands']['read'] = True
 
             # Publish packet managment
-            elif command in ['puback', 'pubrec', 'pubrel', 'pubcomp']:
+            elif command in ['puback', 'pubrec', 'pubcomp']:
                 response['commands']['read'] = True
 
             # Protocol Error
@@ -170,6 +172,13 @@ class RoutingService(amqp_helper.AmqpAgent):
         self.publish(
             obj=request,
             queue=env['SUBSCRIPTION_SERVICE'],
+            correlation_id=connection.get_id())
+
+    def publishing(self, request, connection):
+
+        self.publish(
+            obj=request,
+            queue=env['PUBLISH_SERVICE'],
             correlation_id=connection.get_id())
 
     def take_over_session(self, cid):

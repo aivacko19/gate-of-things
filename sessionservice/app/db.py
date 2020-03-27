@@ -14,7 +14,7 @@ CREATE_TABLE = """
     );
     CREATE TABLE IF NOT EXISTS subscription (
         id SERIAL PRIMARY KEY,
-        session_id INTEGER,
+        session_id VARCHAR(23),
         topic_filter VARCHAR(40),
         subscription_id INTEGER,
         max_qos INTEGER CHECK (max_qos BETWEEN 0 AND 2),
@@ -22,8 +22,13 @@ CREATE_TABLE = """
         retain_as_published BOOLEAN,
         retain_handling INTEGER CHECK (retain_handling BETWEEN 0 AND 2),
         UNIQUE (session_id, topic_filter),
-        FOREIGN KEY (session_id) REFERENCES session ON DELETE CASCADE
+        FOREIGN KEY (session_id) REFERENCES session (cid) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS packet_identifier (
+        session_id VARCHAR(23),
+        packet_id INTEGER,
+        FOREIGN KEY (session_id) REFERENCES session (cid) ON DELETE CASCADE
+    )
 """
 
 DELETE = """
@@ -44,7 +49,7 @@ SELECT = """
 
 SELECT_SUB = """
     SELECT topic_filter, subscription_id, max_qos, 
-    no_local, retain_as_published, retain_handling 
+    no_local, retain_as_published, retain_handling, session_id
     FROM subscription
     WHERE session_id = %s
     AND topic_filter = %s
@@ -52,9 +57,32 @@ SELECT_SUB = """
 
 SELECT_SUBS = """
     SELECT topic_filter, subscription_id, max_qos, 
-    no_local, retain_as_published, retain_handling 
+    no_local, retain_as_published, retain_handling, session_id
     FROM subscription
     WHERE session_id = %s
+"""
+
+SELECT_MATCHING_SUBS = """
+    SELECT topic_filter, subscription_id, max_qos, 
+    no_local, retain_as_published, retain_handling, session_id
+    FROM subscription
+    WHERE topic_filter = %s
+"""
+
+SELECT_PACKET_IDS = """
+    SELECT packet_id FROM packet_identifier
+    WHERE session_id = %s
+"""
+
+INSERT_PACKET_ID = """
+    INSERT INTO packet_identifier (session_id, packet_id)
+    VALUES (%s, %s)
+"""
+
+DELETE_PACKET_ID = """
+    DELETE FROM packet_identifier
+    WHERE session_id = %s
+    AND packet_id = %s
 """
 
 insert_keys = ['cid', 'email']
@@ -118,9 +146,9 @@ class SessionDB:
         cursor = self.connection.cursor()
         cursor.execute(DELETE, (session.get_id(),))
 
-    def delete_sub(self, session, sub):
+    def delete_sub(self, sub):
         cursor = self.connection.cursor()
-        cursor.execute(SELECT_SUB, (session.get_id(), sub.get_topic_filter()))
+        cursor.execute(SELECT_SUB, (sub.get_session_id(), sub.get_topic_filter()))
 
     def get(self, cid):
         cursor = self.connection.cursor()
@@ -134,7 +162,7 @@ class SessionDB:
         cursor.execute(SELECT_SUBS, (session.get_id(),))
         result = cursor.fetchall()
         for sub in result:
-            session.add_sub(Subscription(db_row=sub))
+            session.add_sub(Subscription(sub))
         return session
 
     def get_sub(self, session, topic_filter):
@@ -142,7 +170,16 @@ class SessionDB:
         cursor.execute(SELECT_SUB, (session.get_id(), topic_filter))
         result = cursor.fetchone()
         if not result: return None
-        return Subscription(db_row=result)
+        return Subscription(result)
+
+    def get_matching_subs(self, topic):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_MATCHING_SUBS, (topic,))
+        result = cursor.fetchall()
+        subs = list()
+        for sub in result:
+            subs.append(Subscription(sub))
+        return subs
 
 
     def add(self, cid, email):
@@ -152,14 +189,14 @@ class SessionDB:
     def add_sub(self, session, sub):
         exists = self.get_sub(session, sub['filter'])
         if exists:
-            self.update_sub(session, sub)
+            self.update_sub(sub)
         else:
-            self.insert_sub(session, sub)
+            self.insert_sub(sub)
 
-    def insert_sub(self, session, sub):
+    def insert_sub(self, sub):
         cursor = self.connection.cursor()
         cursor.execute(INSERT_SUB, (
-            session.get_id(),
+            sub.get('session_id'),
             sub.get('filter'),
             sub.get('sub_id'),
             sub.get('max_qos'),
@@ -179,8 +216,25 @@ class SessionDB:
             sub.get('no_local'),
             sub.get('retain_as_published'),
             sub.get('retain_handling'),
-            session.get_id(),
+            sub.get('session_id'),
             sub.get('filter'),))
+
+    def get_packet_ids(self, session):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_PACKET_IDS, (session.get_id()))
+        result = cursor.fetchall()
+        ids = list()
+        for packet_id in result:
+            ids.append(packet_id[0])
+        return ids
+
+    def add_packet_id(self, session_id, packet_id):
+        cursor = self.connection.cursor()
+        cursor.execute(INSERT_PACKET_ID, (session_id, packet_id))
+
+    def delete_packet_id(self, session_id, packet_id):
+        cursor = self.connection.cursor()
+        cursor.execute(DELETE_PACKET_ID, (session_id, packet_id))
 
     def close(self):
         self.connection.close()
@@ -189,8 +243,7 @@ class SessionDB:
 class Session:
 
     def __init__(self, db_row):
-        self.id = db_row[0]
-        self.cid = db_row[1]
+        self.id = db_row[1]
         self.email = db_row[2]
         self.subs = list()
 
@@ -218,21 +271,14 @@ class Session:
 
 class Subscription:
 
-    def __init__(self, db_row=None, sub_id=None, packet=None):
-        if db_row:
-            self.topic_filter = db_row[0]
-            self.sub_id = db_row[1]
-            self.max_qos = db_row[2]
-            self.no_local = db_row[3]
-            self.retain_as_published = db_row[4]
-            self.retain_handling = db_row[5]
-        else:
-            self.topic_filter = packet.get("filter")
-            self.sub_id = sub_id
-            self.max_qos = packet.get('max_qos')
-            self.no_local = packet.get('no_local')
-            self.retain_as_published = packet.get('retain_as_published')
-            self.retain_handling = packet.get('retain_handling')
+    def __init__(self, db_row):
+        self.topic_filter = db_row[0]
+        self.sub_id = db_row[1]
+        self.max_qos = db_row[2]
+        self.no_local = db_row[3]
+        self.retain_as_published = db_row[4]
+        self.retain_handling = db_row[5]
+        self.session_id = db_row[6]
 
     def get_topic_filter(self):
         return self.topic_filter
@@ -251,6 +297,9 @@ class Subscription:
         
     def get_retain_handling(self):
         return self.retain_handling
+
+    def get_session_id(self):
+        return self.session_id
 
         
 if __name__ == '__main__':

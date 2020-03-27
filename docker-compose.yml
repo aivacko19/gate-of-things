@@ -20,6 +20,7 @@ services:
       VERIFICATION_SERVICE: auth-listener
       OAUTH_URI_SERVICE: auth-service
       SUBSCRIPTION_SERVICE: subscription-service
+      PUBLISH_SERVICE: publish-service
       SESSION_SERVICE: session-service
       DB_NAME: mydb
       DB_USER: root
@@ -44,10 +45,11 @@ services:
       AMQP_URL: rabbitmq
       SESSION_SERVICE: session-service
       SUBSCRIPTION_SERVICE: subscription-service
+      PUBLISH_SERVICE: publish-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root
-      DB_HOST: session_db
+      DB_HOST: conn_db
   rabbitmq:
     image: rabbitmq:3.8-alpine
     ports:

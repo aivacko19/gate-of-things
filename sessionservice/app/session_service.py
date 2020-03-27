@@ -37,7 +37,7 @@ class SessionService(amqp_helper.AmqpAgent):
                 # Authorize (email, topic_filter)
 
                 if not authorized:
-                    self.db.delete_sub(session, sub)
+                    self.db.delete_sub(sub)
             session.set_email(email)
             self.db.update(session)
 

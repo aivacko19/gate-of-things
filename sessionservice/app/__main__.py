@@ -13,7 +13,8 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
 env = {
     'SESSION_SERVICE': None,
-    'SUBSCRIPTION_SERVICE': None
+    'SUBSCRIPTION_SERVICE': None,
+    'PUBLISH_SERVICE': None
 }
 
 for key in env:
@@ -30,16 +31,21 @@ mydb = db.SessionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
 
 session_service = SessionService(env['SESSION_SERVICE'], mydb)
 subscription_service = SubscriptionService(env['SUBSCRIPTION_SERVICE'], mydb)
+publish_service = PublishService(env['PUBLISH_SERVICE'], mydb)
 
 session_service.start()
 subscription_service.start()
+publish_service.start()
 
 try:
     session_service.join()
     subscription_service.join()
+    publish_service.join()
 except KeyboardInterrupt:
     LOGGER.error('Caught Keyboard Interrupt, exiting...')
     session_service.close()
     subscription_service.close()
+    publish_service.close()
     session_service.join()
     subscription_service.join()
+    publish_service.join()

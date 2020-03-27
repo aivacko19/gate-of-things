@@ -10,6 +10,10 @@ class ProtocolError(Exception):
     def __init__(self, message):
         super().__init__(message)
 
+class UnsupportedProtocolError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
 #==========================+++++++++++++++++==========================
 #                          +++++       +++++
 #                          +++++ PARSE +++++
@@ -59,8 +63,8 @@ def read(stream):
     except ProtocolError as e: 
         packet['error'] = PROTOCOL_ERROR
         logging.error(repr(e))
-    except UnicodeDecodeError as e:
-        packet['error'] = PAYLOAD_FORMAT_INVALID
+    except UnsupportedProtocolError as e:
+        packet['error'] = UNSUPPORTED_PROTOCOL_ERROR
         logging.error(repr(e))
     except Exception as e:
         packet['error'] = UNSPECIFIED_ERROR
@@ -74,11 +78,6 @@ def read_pub_packet(packet, stream):
         packet['id'] = stream.get_int()
     packet['properties'] = get_properties(stream, packet['type'])
     packet['payload'] = stream.dump()
-    if 'payload_format_indicator' in packet['properties']:
-        pfi = packet['properties']['payload_format_indicator']
-        if pfi == 1:
-            message['payload'].decode('utf-8')
-
 
 def read_sub_packet(packet, stream):
     logging.info("Parsing SUB packet")
@@ -108,8 +107,12 @@ def read_sub_packet(packet, stream):
 
 def read_connect_packet(packet, stream):
     logging.info("Parsing CONNECT packet")
-    packet['protocol_name'] = stream.get_string()
-    packet['protocol_version'] = stream.get_byte()
+    protocol_name = stream.get_string()
+    if protocol_name != 'MQTT':
+        raise UnsupportedProtocolError(f"Server does not support protocol: {protocol_name}")
+    protocol_version = stream.get_byte()
+    if protocol_version != 5:
+        raise UnsupportedProtocolError(f"Server does not support MQTT version {protocol_version}")
     username_flag, password_flag, retain, qos, \
         will_flag, clean_start, reserved = stream.get_connect_flags()
     if reserved:
@@ -221,8 +224,8 @@ def write_sub_packet(packet, stream):
             stream.put_byte(topic['code'])
 
 def write_connect_packet(packet, stream):
-    stream.put_string(packet['protocol_name'])
-    stream.put_byte(packet['protocol_version'])
+    stream.put_string('MQTT')
+    stream.put_byte(5)
     username_flag = 'username' in packet
     password_flag = 'password' in packet
     will_flag = 'will' in packet

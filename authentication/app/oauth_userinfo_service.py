@@ -1,14 +1,29 @@
-import json
+
 import os
+import json
 
 import flask
 import requests
 
+import amqp_helper
 from providers import google as provider
 from auth_publisher import AuthenticationPublisher
 
 app = flask.Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
+
+my_agent = amqp_helper.AmqpAgent()
+my_agent.connect()
+
+env = {
+    'VERIFICATION_SERVICE': None
+}
+
+for key in env:
+    service = os.environ.get(key)
+    if not service:
+        raise Exception('Environment variable %s not defined', key)
+    env[key] = service
 
 @app.route("/")
 def index():
@@ -39,14 +54,19 @@ def index():
     uri, headers, body = provider.client.add_token(userinfo_endpoint)
     userinfo = requests.get(uri, headers=headers, data=body).json()
 
+    # Prepare email and response
     if not userinfo.get("email_verified"):
-        AuthenticationPublisher.getInstance().publish(user_reference)
-        return "User email not available or not verified by Google.", 400
+        email = None
+        response = ("User email not available or not verified by Google.", 400)
+    else:
+        email = userinfo["email"]
+        response = (
+            "<p>You logged in! You're a Legend! Email: {}</p>"
+            "<p>Check your MQTT Connection</p>".format(email))
 
-    email = userinfo["email"]
-    AuthenticationPublisher.getInstance().publish(user_reference, email)
-    
-    return (
-        "<p>You logged in! You're a Legend! Email: {}</p>"
-        "<p>Check your MQTT Connection</p>".format(email)
-    )
+    my_agent.publish(
+            obj={'email': email, 'oauth': True}, 
+            queue=env['VERIFICATION_SERVICE'], 
+            correlation_id=user_reference,)
+
+    return response

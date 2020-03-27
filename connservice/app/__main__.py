@@ -1,28 +1,45 @@
 #!/usr/bin/env python3
 
-import sys
 import os
-import pika
-import time
 import logging
-import threading
 
-import gateway_listener
-import oauth_response
-import request_uri_client
+import db
+from routing_service import RoutingService
+from verification_service import VerificationService
 
+LOGGER = logging.getLogger(__name__)
+LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %(message)s')
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
-logging.basicConfig(level=logging.INFO)
+env = {
+    'ROUTING_SERVICE': None,
+    'VERIFICATION_SERVICE': None
+}
 
-RABBITMQ = os.environ.get('RABBITMQ', 'localhost')
-GATEWAY_QUEUE = os.environ.get('GATEWAY_QUEUE', 'conn-service-auth')
-AUTH_QUEUE = os.environ.get('AUTH_QUEUE', 'conn-service-gate')
-AUTH_REMOTE = os.environ.get('AUTH_REMOTE', 'auth-service')
+for key in env:
+    service = os.environ.get(key)
+    if not service:
+        raise Exception('Environment variable %s not defined', key)
+    env[key] = service
 
-request_uri_client.RequestUriRpcClient.initInstance(RABBITMQ, AUTH_REMOTE)
-oauth_service = oauth_response.OAuthListener(RABBITMQ, AUTH_QUEUE, db)
-gateway_service = gateway_listener.GatewayListener(RABBITMQ, GATEWAY_QUEUE, db)
+DB_NAME = os.environ.get('DB_NAME', 'mydb')
+DB_USER = os.environ.get('DB_USER', 'root')
+DB_PASS = os.environ.get('DB_PASS', 'root')
+DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
+mydb = db.ConnectionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
 
-oauth_service.run()
-logging.info(f"Running oauth verification service {oauth_service.is_alive()}")
-gateway_service.run()
+router = RoutingService(env['ROUTING_SERVICE'], mydb)
+verificator = VerificationService(env['VERIFICATION_SERVICE'], mydb)
+
+router.start()
+verificator.start()
+
+try:
+    router.join()
+    verificator.join()
+except KeyboardInterrupt:
+    LOGGER.error('Caught Keyboard Interrupt, exiting...')
+    router.close()
+    verificator.close()
+    router.join()
+    verificator.join()

@@ -3,12 +3,25 @@
 import socket
 import selectors
 import logging
+import os 
+
+LOGGER = logging.getLogger(__name__)
+
+env = {
+    'ROUTING_SERVICE': None
+}
+
+for key in env:
+    service = os.environ.get(key)
+    if not service:
+        raise Exception('Environment variable %s not defined', key)
+    env[key] = service
 
 class Gateway():
-    def __init__(self, host, protocol, mail):
+    def __init__(self, host, protocol, agent):
         self.host = host
         self.protocol = protocol
-        self.mail = mail
+        self.agent = agent
         self.stop_flag = False
         self.listener = None
         self.selector = None
@@ -87,7 +100,10 @@ class Gateway():
 
     def disconnect_user(self, user_reference):
         packet = {'disconnect': True}
-        self.mail.put(user_reference, packet)
+        self.agent.publish(
+            obj=packet,
+            queue=env['ROUTING_SERVICE'],
+            correlation_id=user_reference)
         if user_reference in self.connections:
             del self.connections[user_reference]
 
@@ -134,14 +150,19 @@ class Gateway():
                                 if self.protocol.still_loading(stream):
                                     break
 
-                                logging.info(f'Parsing {user_reference}')
+                                LOGGER.info(f'Parsing {user_reference}')
                                 packet, error = self.protocol.parse(stream)
                                 if error:
                                     self.disconnect_user(user_reference)
                                     self.register_write(client, packet)
                                     break
 
-                                self.mail.put(user_reference, packet)
+                                self.agent.publish(
+                                    obj=packet,
+                                    queue=env['ROUTING_SERVICE'],
+                                    correlation_id=user_reference)
+
+                                LOGGER.info('Sent packet %s on queue %s', packet, env['ROUTING_SERVICE'])
 
                             if (self.socket_alive(client) 
                                 and not self.protocol.still_loading(stream)):
@@ -165,7 +186,7 @@ class Gateway():
                                 self.unregister(client)
 
 
-                addr, packet = self.mail.get()
+                packet, addr = self.agent.get()
                 if packet:
                     commands = packet['commands']
                     del packet['commands']
@@ -188,7 +209,7 @@ class Gateway():
                     else:
                         self.unregister(client, close=False)
 
-                if self.stop_flag or not self.mail.is_alive():
+                if self.stop_flag:
                     break
 
         except KeyboardInterrupt:

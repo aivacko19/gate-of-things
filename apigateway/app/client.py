@@ -5,7 +5,6 @@ import sys
 import threading
 
 from protocols import mqtt as protocol
-import bytescoder
 
 if (__name__) == '__main__':
 
@@ -35,8 +34,7 @@ if (__name__) == '__main__':
                 stream.load()
 
             packet = protocol.parser.read(stream)
-            body = json.dumps(packet, cls=bytescoder.BytesEncoder)
-            print(body)
+            print(packet)
 
             
 

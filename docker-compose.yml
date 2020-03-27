@@ -8,17 +8,20 @@ services:
     volumes:
       - ./apigateway:/usr/src/app
     environment:
-      RABBITMQ: rabbitmq
-      GATEWAY_REMOTE: gateway-listener
+      AMQP_URL: rabbitmq
+      ROUTING_SERVICE: gateway-listener
   connservice:
     build: ./connservice
     volumes:
       - ./connservice:/usr/src/app
     environment:
-      RABBITMQ: rabbitmq
-      GATEWAY_QUEUE: gateway-listener
-      AUTH_QUEUE: auth-listener
-      AUTH_REMOTE: auth-service
+      AMQP_URL: rabbitmq
+      ROUTING_SERVICE: gateway-listener
+      VERIFICATION_SERVICE: auth-listener
+      OAUTH_URI_SERVICE: auth-service
+      SUBSCRIPTION_SERVICE: subscription-service
+      PUBLISH_SERVICE: publish-service
+      SESSION_SERVICE: session-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root
@@ -30,12 +33,25 @@ services:
     volumes:
       - ./authentication:/usr/src/app
     environment:
-      RABBITMQ: rabbitmq
-      QUEUE: auth-service
-      RECEPIENT: auth-listener
+      AMQP_URL: rabbitmq
+      OAUTH_URI_SERVICE: auth-service
+      VERIFICATION_SERVICE: auth-listener
       REDIRECT_URI: "https://127.0.0.1:55000/"
+  sessionservice:
+    build: ./sessionservice
+    volumes:
+      - ./sessionservice:/usr/src/app
+    environment:
+      AMQP_URL: rabbitmq
+      SESSION_SERVICE: session-service
+      SUBSCRIPTION_SERVICE: subscription-service
+      PUBLISH_SERVICE: publish-service
+      DB_NAME: mydb
+      DB_USER: root
+      DB_PASS: root
+      DB_HOST: conn_db
   rabbitmq:
-    image: rabbitmq:3
+    image: rabbitmq:3.8-alpine
     ports:
       - "5672:5672"
   conn_db:
@@ -48,7 +64,16 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
       POSTGRES_DB: mydb
+  session_db:
+    image: postgres:10-alpine
+    volumes:
+      - session-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: mydb
 
 volumes:
   conn-db-data:
+  session-db-data:
 

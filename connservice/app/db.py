@@ -53,19 +53,6 @@ UPDATE = """
 
 class ConnectionDB:
 
-    __instance = None
-
-    @staticmethod
-    def getInstance():
-        if not ConnectionDB.__instance:
-            DB_NAME = os.environ.get('DB_NAME', 'mydb')
-            DB_USER = os.environ.get('DB_USER', 'root')
-            DB_PASS = os.environ.get('DB_PASS', 'root')
-            DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
-            ConnectionDB.__instance = ConnectionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
-
-        return ConnectionDB.__instance
-
     def __init__(self, db_name, db_user, db_password, db_host):
         self.connection = psycopg2.connect(
             database=db_name,
@@ -109,6 +96,7 @@ class ConnectionDB:
 
         cursor = self.connection.cursor()
         cursor.execute(INSERT, conn.get_db_row())
+        return conn.get_id()
 
     def update(self, conn):
         cursor = self.connection.cursor()

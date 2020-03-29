@@ -22,6 +22,7 @@ services:
       SUBSCRIPTION_SERVICE: subscription-service
       PUBLISH_SERVICE: publish-service
       SESSION_SERVICE: session-service
+      MESSAGE_SERVICE: message-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root
@@ -46,6 +47,19 @@ services:
       SESSION_SERVICE: session-service
       SUBSCRIPTION_SERVICE: subscription-service
       PUBLISH_SERVICE: publish-service
+      MESSAGE_SERVICE: message-service
+      DB_NAME: mydb
+      DB_USER: root
+      DB_PASS: root
+      DB_HOST: conn_db
+  messages:
+    build: ./messages
+    volumes:
+      - ./messages:/usr/src/app
+    environment:
+      AMQP_URL: rabbitmq
+      MESSAGE_SERVICE: message-service
+      ROUTING_SERVICE: routing-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root

@@ -92,6 +92,8 @@ class VerificationService(amqp_helper.AmqpAgent):
                     queue=env['SESSION_SERVICE'],
                     correlation_id=conn.get_id())
 
+            # Establish send quota for RECEIVE_MAXIMUM
+
         LOGGER.info('Responding with: %s', response)
 
         socket, reply_queue = conn.get_socket()

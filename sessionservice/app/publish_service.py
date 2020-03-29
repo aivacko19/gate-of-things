@@ -16,7 +16,7 @@ PAYLOAD_FORMAT_INVALID = 0x99
 UTF8_FORMAT = 1
 
 env = {
-    'SESSION_STATE_SERVICE': None
+    'MESSAGE_SERVICE': None
 }
 
 for key in env:
@@ -39,26 +39,28 @@ class PublishService(amqp_helper.AmqpAgent):
 
         if command == 'pubrel':
             code = SUCCESS if request.get('id') in ids else PACKET_IDENTIFIER_NOT_FOUND
-            response = {
-                'type': 'pubcomp',
-                'id': request.get('id'),
-                'code': code,
-                'service': True,
-                'commands': {'write': True, 'read': True}}
-            self.publish(
-                obj=response,
-                queue=props.reply_to,
-                correlation_id=props.correlation_id)
+            if request.get('code') < 0x80:
+                response = {
+                    'type': 'pubcomp',
+                    'id': request.get('id'),
+                    'code': code,
+                    'service': True,
+                    'commands': {'write': True, 'read': True}}
+                self.publish(
+                    obj=response,
+                    queue=props.reply_to,
+                    correlation_id=props.correlation_id)
             if code == SUCCESS:
                 db.delete_packet_id(props.correlation_id, request.get('id'))
             return
 
         if command != 'publish': return
 
-        if request.get('id') in ids:
-            LOGGER.info('ERROR: %s: Packet identifier in use', props.correlation_id)
-            self.reply(request, props, PACKET_IDENTIFIER_IN_USE)
-            return
+        if request.get('qos') > 0
+            if request.get('id') in ids:
+                LOGGER.info('ERROR: %s: Packet identifier in use', props.correlation_id)
+                self.reply(request, props, PACKET_IDENTIFIER_IN_USE)
+                return
 
         topic = request.get('topic')
         email = session.get_email()
@@ -93,24 +95,26 @@ class PublishService(amqp_helper.AmqpAgent):
             self.reply(request, props, SUCCESS)
 
         for sub in subs:
-            response = {
-                'type': 'publish',
-                'topic': sub.get_topic_filter(),
-                'qos': min(request.get('qos'), sub.get_max_qos())
-                'payload': payload
-            }
 
             if sub.get_no_local() and sub.get_session_id() == session.get_id():
                 continue
 
-            response['properties'] = request.get('properties')
+            response = {
+                'type': 'publish',
+                'topic': sub.get_topic_filter(),
+                'qos': min(request.get('qos'), sub.get_max_qos()),
+                'payload': payload,
+                'received': request.get('received'),
+                'properties': request.get('properties'),
+            }
+
             del response['properties']['subscription_id']
             if sub.get_sub_id():
                 response['properties']['subscription_id'] = sub.get_sub_id()
 
             self.publish(
                 obj=response,
-                queue=SESSION_STATE_SERVICE,
+                queue=env['MESSAGE_SERVICE'],
                 correlation_id=sub.get_session_id())
 
     def reply(self, request, props, code):

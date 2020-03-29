@@ -1,6 +1,7 @@
 
 import os
 import logging
+import time
 
 import amqp_helper
 from db import ConnectionDB
@@ -21,7 +22,8 @@ LOGGER = logging.getLogger(__name__)
 env = {
     'OAUTH_URI_SERVICE': None,
     'SUBSCRIPTION_SERVICE': None,
-    'PUBLISH_SERVICE': None
+    'PUBLISH_SERVICE': None,
+    'MESSAGE_SERVICE': None
 }
 
 for key in env:
@@ -88,8 +90,10 @@ class RoutingService(amqp_helper.AmqpAgent):
                         conn.set_id(cid)
                         self.take_over_session(self.db, cid)
 
-                    self.db.add(conn)
-                    self.authenticating(conn)
+                    cid = self.db.add(conn)
+                    self.redirect(request, conn, 'MESSAGE_SERVICE')
+                    if method == 'OAuth2.0':
+                        self.redirect({'oauth_request': True}, conn, 'OAUTH_URI_SERVICE')
                     response = {'commands': {}}
 
             # Protocol Error
@@ -138,21 +142,24 @@ class RoutingService(amqp_helper.AmqpAgent):
                     or method not in ['OAuth2.0']):
                     response['code'] = BAD_AUTHENTICATION_METHOD
                 else:
-                    self.authenticating(conn)
+                    if method == 'OAuth2.0':
+                        self.redirect({'oauth_request': True}, conn, 'OAUTH_URI_SERVICE')
                     response = {'commands': {}}
 
             # Subscription managment
             elif command in ['subscribe', 'unsubscribe']:
-                self.subscribing(request, conn)
+                self.redirect(request, conn, 'SUBSCRIPTION_SERVICE')
                 response['commands']['read'] = True
 
             # Publishing
             elif command in ['publish', 'pubrel']:
-                self.publishing(request, conn)
+                request['received'] = int(time.time()*10**4)
+                self.redirect(request, conn, 'PUBLISH_SERVICE')
                 response['commands']['read'] = True
 
-            # Publish packet managment
+            # Message managment
             elif command in ['puback', 'pubrec', 'pubcomp']:
+                self.redirect(request, conn, 'MESSAGE_SERVICE')
                 response['commands']['read'] = True
 
             # Protocol Error
@@ -167,18 +174,10 @@ class RoutingService(amqp_helper.AmqpAgent):
             queue=props.reply_to,
             correlation_id=props.correlation_id)
 
-    def subscribing(self, request, connection):
-
+    def redirect(self, request, connection, target):
         self.publish(
             obj=request,
-            queue=env['SUBSCRIPTION_SERVICE'],
-            correlation_id=connection.get_id())
-
-    def publishing(self, request, connection):
-
-        self.publish(
-            obj=request,
-            queue=env['PUBLISH_SERVICE'],
+            queue=env[target],
             correlation_id=connection.get_id())
 
     def take_over_session(self, cid):
@@ -192,14 +191,3 @@ class RoutingService(amqp_helper.AmqpAgent):
                 queue=reply_queue,
                 correlation_id=socket)
             self.db.delete(cid)
-
-    def authenticating(self, connection):
-        method = connection.get_method()
-        if method == 'OAuth2.0':
-            self.publish(
-                obj={'oauth_request': True},
-                queue=env['OAUTH_URI_SERVICE'],
-                correlation_id=connection.get_id())
-        else:
-            pass
-            

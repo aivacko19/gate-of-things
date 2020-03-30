@@ -7,7 +7,6 @@ import requests
 
 import amqp_helper
 from providers import google as provider
-from auth_publisher import AuthenticationPublisher
 
 app = flask.Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)

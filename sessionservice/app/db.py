@@ -33,7 +33,7 @@ CREATE_TABLE = """
 
 DELETE = """
     DELETE FROM session
-    WHERE id = %s
+    WHERE cid = %s
 """
 
 DELETE_SUB = """
@@ -103,7 +103,7 @@ INSERT_SUB = f"""
 UPDATE = """
     UPDATE session
     SET email = %s
-    WHERE id = %s
+    WHERE cid = %s
 """
 
 UPDATE_SUB = """
@@ -221,7 +221,7 @@ class SessionDB:
 
     def get_packet_ids(self, session):
         cursor = self.connection.cursor()
-        cursor.execute(SELECT_PACKET_IDS, (session.get_id()))
+        cursor.execute(SELECT_PACKET_IDS, (session.get_id(),))
         result = cursor.fetchall()
         ids = list()
         for packet_id in result:

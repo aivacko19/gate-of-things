@@ -59,7 +59,7 @@ services:
     environment:
       AMQP_URL: rabbitmq
       MESSAGE_SERVICE: message-service
-      ROUTING_SERVICE: routing-service
+      ROUTING_SERVICE: gateway-listener
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root

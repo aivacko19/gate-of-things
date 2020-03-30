@@ -34,9 +34,10 @@ class MessageService(amqp_helper.AmqpAgent):
 
     def main(self, request, props):
         command = request.get('type')
+        LOGGER.info('Client ID: %s, Action: %s', props.correlation_id, command)
 
         if command == 'publish':
-            self.publish(request, props)
+            self._publish(request, props)
         elif command == 'puback':
             self.puback(request, props)
         elif command == 'pubrec':
@@ -44,56 +45,57 @@ class MessageService(amqp_helper.AmqpAgent):
         elif command == 'pubcomp':
             self.puback(request, props)
         elif command == 'connect':
-            self.connect(request, props)
+            self._connect(request, props)
         else:
             LOGGER.error('Unknown command received')
 
-    def publish(self, request, props):
-        response = request.copy()
+    def _publish(self, request, props):
 
-        received = float(response.get('received'))/10**4
-        del response['received']
-        time_diff = time.time() - received
-        message_expiry = response.get('properties').get('message_expiry_interval')
-        if time_diff >= message_expiry:
-            return
-
-        if response.get('qos') > 0:
-            response['id'] = db.add(props.correlation_id, response)
-            if response['id'] <= 0:
+        time_received = float(request.get('time_received'))/10**4
+        del request['time_received']
+        time_diff = time.time() - time_received
+        message_expiry = request.get('properties').get('message_expiry_interval')
+        if message_expiry:
+            if time_diff >= message_expiry:
                 return
 
-        response['properties']['message_expiry_interval'] = int(message_expiry - time_diff)
-        response['service'] = True
-        response['commands'] = {'write': True, 'read': True}
+        if request.get('qos') > 0:
+            request['id'] = self.db.add(props.correlation_id, time_received, request)
+            if request['id'] <= 0:
+                return
+
+        if message_expiry:
+            request['properties']['message_expiry_interval'] = int(message_expiry - time_diff)
+        request['service'] = True
+        request['commands'] = {'write': True, 'read': True}
 
         self.publish(
-            obj=response,
+            obj=request,
             queue=env['ROUTING_SERVICE'],
             correlation_id=props.correlation_id)
 
     def puback(self, request, props):
         pid = request.get('id')
-        message = db.get(props.correlation_id, pid)
+        message, time_received = self.db.get(props.correlation_id, pid)
 
         if not message:
             # The MQTT Protocol does not define how to reply in case of wrong packet id
             return
 
-        db.delete(props.correlation_id, pid)
+        self.db.delete(props.correlation_id, pid)
 
     def pubrec(self, request, props):
         pid = request.get('id')
-        message = db.get(props.correlation_id, pid)
+        message, time_received = self.db.get(props.correlation_id, pid)
         code = SUCCESS
 
         if not message:
             code = PACKET_IDENTIFIER_NOT_FOUND
         else:
             if request.get('code') < 0x80:
-                db.set_received(props.correlation_id, pid)
+                self.db.set_received(props.correlation_id, pid)
             else:
-                db.delete(props.correlation_id, pid)
+                self.db.delete(props.correlation_id, pid)
 
         if request.get('code') < 0x80:
             response = {
@@ -109,6 +111,6 @@ class MessageService(amqp_helper.AmqpAgent):
                 queue=env['ROUTING_SERVICE'],
                 correlation_id=props.correlation_id)
 
-    def connect(self, request, props):
+    def _connect(self, request, props):
         receive_max = request.get('properties').get('receive_maximum', 65535)
-        db.set_quota(props.correlation_id, receive_max)
+        self.db.set_quota(props.correlation_id, receive_max)

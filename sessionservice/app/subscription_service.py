@@ -28,7 +28,7 @@ class SubscriptionService(amqp_helper.AmqpAgent):
         command = request.get('type')
         codes = list()
 
-        ids = db.get_packet_ids(session)
+        ids = self.db.get_packet_ids(session)
         if request.get('id') in ids:
             LOGGER.info('ERROR: %s: Packet identifier in use', props.correlation_id)
             for topic in request.get('topics'):

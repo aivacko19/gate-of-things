@@ -88,7 +88,7 @@ class RoutingService(amqp_helper.AmqpAgent):
                         conn.set_random_id(True)
                     else:
                         conn.set_id(cid)
-                        self.take_over_session(self.db, cid)
+                        self.take_over_session(cid)
 
                     cid = self.db.add(conn)
                     self.redirect(request, conn, 'MESSAGE_SERVICE')
@@ -153,7 +153,7 @@ class RoutingService(amqp_helper.AmqpAgent):
 
             # Publishing
             elif command in ['publish', 'pubrel']:
-                request['received'] = int(time.time()*10**4)
+                request['time_received'] = int(time.time()*10**4)
                 self.redirect(request, conn, 'PUBLISH_SERVICE')
                 response['commands']['read'] = True
 
@@ -184,8 +184,12 @@ class RoutingService(amqp_helper.AmqpAgent):
         conn = self.db.get(cid)
         if conn:
             socket, reply_queue = conn.get_socket()
-            response['type'] = 'disconnect',
-            response['code'] = SESSION_TAKEN_OVER,
+            response = {
+                'type': 'disconnect',
+                'code': SESSION_TAKEN_OVER,
+                'commands': {
+                    'write': True,
+                    'disconnect': True,}}
             self.publish(
                 obj=response,
                 queue=reply_queue,

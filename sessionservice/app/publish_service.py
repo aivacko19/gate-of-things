@@ -35,7 +35,7 @@ class PublishService(amqp_helper.AmqpAgent):
         LOGGER.info('Fetching session with id %s', props.correlation_id)
         session = self.db.get(props.correlation_id)
         command = request.get('type')
-        ids = db.get_packet_ids(session)
+        ids = self.db.get_packet_ids(session)
 
         if command == 'pubrel':
             code = SUCCESS if request.get('id') in ids else PACKET_IDENTIFIER_NOT_FOUND
@@ -51,12 +51,12 @@ class PublishService(amqp_helper.AmqpAgent):
                     queue=props.reply_to,
                     correlation_id=props.correlation_id)
             if code == SUCCESS:
-                db.delete_packet_id(props.correlation_id, request.get('id'))
+                self.db.delete_packet_id(props.correlation_id, request.get('id'))
             return
 
         if command != 'publish': return
 
-        if request.get('qos') > 0
+        if request.get('qos') > 0:
             if request.get('id') in ids:
                 LOGGER.info('ERROR: %s: Packet identifier in use', props.correlation_id)
                 self.reply(request, props, PACKET_IDENTIFIER_IN_USE)
@@ -85,33 +85,36 @@ class PublishService(amqp_helper.AmqpAgent):
                 self.reply(request, props, PAYLOAD_FORMAT_INVALID)
                 return
 
-        subs = db.get_matching_subs(topic)
+        subs = self.db.get_matching_subs(topic)
 
         if not subs:
             LOGGER.info('%s: No matching subscriptions', props.correlation_id)
             self.reply(request, props, NO_MATCHING_SUBSCRIPTIONS)
         else:
-            LOGGER.info('%s: Publishing to topics...', props.correlation_id)
+            LOGGER.info('%s: Publishing to subscriptions...', props.correlation_id)
             self.reply(request, props, SUCCESS)
 
-        for sub in subs:
+        client_map = {}
 
-            if sub.get_no_local() and sub.get_session_id() == session.get_id():
+        for sub in subs:
+            cid = sub.get_session_id()
+
+            if sub.get_no_local() and cid == session.get_id():
                 continue
 
-            response = {
-                'type': 'publish',
-                'topic': sub.get_topic_filter(),
-                'qos': min(request.get('qos'), sub.get_max_qos()),
-                'payload': payload,
-                'received': request.get('received'),
-                'properties': request.get('properties'),
-            }
+            if client_map.get(cid):
+                if sub.get_sub_id():
+                    client_map[cid]['properties']['subscription_identifier'].append(sub.get_sub_id())
+            else:
+                response = request.copy()
+                response['topic'] = sub.get_topic_filter()
+                response['qos'] = min(request.get('qos'), sub.get_max_qos())
+                response['properties']['subscription_identifier'] = list()
+                if sub.get_sub_id():
+                    response['properties']['subscription_identifier'].append(sub.get_sub_id())
+                client_map[cid] = response
 
-            del response['properties']['subscription_id']
-            if sub.get_sub_id():
-                response['properties']['subscription_id'] = sub.get_sub_id()
-
+        for response in client_map.values():
             self.publish(
                 obj=response,
                 queue=env['MESSAGE_SERVICE'],
@@ -122,7 +125,7 @@ class PublishService(amqp_helper.AmqpAgent):
         if qos == 0: return
         response = {
             'type': 'puback' if qos == 1 else 'pubrec',
-            'id': request.get('id')
+            'id': request.get('id'),
             'code': code,
             'service': True,
             'commands': {'write': True, 'read': True}}
@@ -131,7 +134,7 @@ class PublishService(amqp_helper.AmqpAgent):
             queue=props.reply_to,
             correlation_id=props.correlation_id)
         if qos == 2 and code == SUCCESS:
-            db.add_packet_id(props.correlation_id, request.get('id'))
+            self.db.add_packet_id(props.correlation_id, request.get('id'))
 
 
 

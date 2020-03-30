@@ -4,8 +4,7 @@ import os
 import logging
 
 import db
-from session_service import SessionService
-from subscription_service import SubscriptionService
+from message_service import MessageService
 
 LOGGER = logging.getLogger(__name__)
 LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %(message)s')

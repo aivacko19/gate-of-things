@@ -23,14 +23,8 @@ class OAuthUriService(amqp_helper.AmqpAgent):
             state=props.correlation_id,)
 
         response = {
-            'service': True,
-            'type': 'auth',
-            'code': CONTINUE_AUTHENTICATION,
-            'properties': {
-                'authentication_method': 'OAuth2.0',
-                'authentication_data': request_uri.encode('utf-8'),},
-            'commands': {
-                'write': True}}
+            'command': 'oauth_uri',
+            'uri': request_uri}
         self.publish(
             obj=response, 
             queue=props.reply_to, 

@@ -1,52 +1,47 @@
 version: '3'
 
 services:
-  apigateway:
-    build: ./apigateway
+  gateway:
+    build: ./gateway
     ports:
       - "1887:1887"
     volumes:
-      - ./apigateway:/usr/src/app
+      - ./gateway:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      ROUTING_SERVICE: gateway-listener
-  connservice:
-    build: ./connservice
+      ROUTING_SERVICE: routing-service
+  router:
+    build: ./router
     volumes:
-      - ./connservice:/usr/src/app
+      - ./router:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      ROUTING_SERVICE: gateway-listener
-      VERIFICATION_SERVICE: auth-listener
+      ROUTING_SERVICE: routing-service
       OAUTH_URI_SERVICE: auth-service
       SUBSCRIPTION_SERVICE: subscription-service
-      PUBLISH_SERVICE: publish-service
-      SESSION_SERVICE: session-service
       MESSAGE_SERVICE: message-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root
       DB_HOST: conn_db
-  authentication:
-    build: ./authentication
+  oauth:
+    build: ./oauth
     ports:
       - "55000:5000"
     volumes:
-      - ./authentication:/usr/src/app
+      - ./oauth:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
       OAUTH_URI_SERVICE: auth-service
-      VERIFICATION_SERVICE: auth-listener
+      ROUTING_SERVICE: auth-listener
       REDIRECT_URI: "https://127.0.0.1:55000/"
-  sessionservice:
-    build: ./sessionservice
+  subscriptions:
+    build: ./subscriptions
     volumes:
-      - ./sessionservice:/usr/src/app
+      - ./subscriptions:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      SESSION_SERVICE: session-service
       SUBSCRIPTION_SERVICE: subscription-service
-      PUBLISH_SERVICE: publish-service
       MESSAGE_SERVICE: message-service
       DB_NAME: mydb
       DB_USER: root
@@ -59,7 +54,7 @@ services:
     environment:
       AMQP_URL: rabbitmq
       MESSAGE_SERVICE: message-service
-      ROUTING_SERVICE: gateway-listener
+      ROUTING_SERVICE: routing-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root

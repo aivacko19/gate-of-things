@@ -74,6 +74,12 @@ SELECT_PACKET_IDS = """
     WHERE session_id = %s
 """
 
+SELECT_PACKET_ID = """
+    SELECT * FROM packet_identifier
+    WHERE session_id = %s
+    AND packet_id = %s
+"""
+
 INSERT_PACKET_ID = """
     INSERT INTO packet_identifier (session_id, packet_id)
     VALUES (%s, %s)
@@ -227,6 +233,11 @@ class SessionDB:
         for packet_id in result:
             ids.append(packet_id[0])
         return ids
+
+    def is_pid_in_use(self, session_id, packet_id):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_PACKET_ID, (session_id, packet_id))
+        return bool(cursor.fetchone())
 
     def add_packet_id(self, session_id, packet_id):
         cursor = self.connection.cursor()

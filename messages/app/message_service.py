@@ -66,8 +66,7 @@ class MessageService(amqp_helper.AmqpAgent):
 
         if message_expiry:
             request['properties']['message_expiry_interval'] = int(message_expiry - time_diff)
-        request['service'] = True
-        request['commands'] = {'write': True, 'read': True}
+        request['command'] = 'forward'
 
         self.publish(
             obj=request,
@@ -99,13 +98,10 @@ class MessageService(amqp_helper.AmqpAgent):
 
         if request.get('code') < 0x80:
             response = {
-                    'type': 'pubrel',
-                    'id': pid,
-                    'code': code,
-                    'service': True,
-                    'commands': {
-                        'write': True,
-                        'read': True}}
+                'command': 'forward',
+                'type': 'pubrel',
+                'id': pid,
+                'code': code,}
             self.publish(
                 obj=response,
                 queue=env['ROUTING_SERVICE'],

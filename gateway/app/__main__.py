@@ -4,7 +4,7 @@ import os
 import logging
 import traceback
 
-import gateway
+import gateway_server
 from inbox_service import InboxService
 from protocols import mqtt as protocol
 
@@ -22,7 +22,7 @@ MY_HOSTNAME = os.getenv('HOST', 'localhost')
 my_agent = InboxService()
 my_agent.start()
 
-api_gateway = gateway.Gateway(MY_HOSTNAME, protocol, my_agent)
+api_gateway = gateway_server.GatewayServer(MY_HOSTNAME, protocol, my_agent)
 try:
     api_gateway.start_listening()
 except Exception as e:

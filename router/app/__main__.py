@@ -5,7 +5,6 @@ import logging
 
 import db
 from routing_service import RoutingService
-from verification_service import VerificationService
 
 LOGGER = logging.getLogger(__name__)
 LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %(message)s')
@@ -29,17 +28,12 @@ DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
 mydb = db.ConnectionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
 
 router = RoutingService(env['ROUTING_SERVICE'], mydb)
-verificator = VerificationService(env['VERIFICATION_SERVICE'], mydb)
 
 router.start()
-verificator.start()
 
 try:
     router.join()
-    verificator.join()
 except KeyboardInterrupt:
     LOGGER.error('Caught Keyboard Interrupt, exiting...')
     router.close()
-    verificator.close()
     router.join()
-    verificator.join()

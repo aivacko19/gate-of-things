@@ -15,7 +15,7 @@ my_agent = amqp_helper.AmqpAgent()
 my_agent.connect()
 
 env = {
-    'VERIFICATION_SERVICE': None
+    'ROUTING_SERVICE': None
 }
 
 for key in env:
@@ -63,9 +63,12 @@ def index():
             "<p>You logged in! You're a Legend! Email: {}</p>"
             "<p>Check your MQTT Connection</p>".format(email))
 
+    request = {
+        'command': 'verify',
+        'email': email}
     my_agent.publish(
-            obj={'email': email, 'oauth': True}, 
-            queue=env['VERIFICATION_SERVICE'], 
-            correlation_id=user_reference,)
+        obj=request, 
+        queue=env['ROUTING_SERVICE'], 
+        correlation_id=user_reference,)
 
     return response

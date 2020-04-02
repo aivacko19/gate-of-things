@@ -72,8 +72,7 @@ class RoutingService(amqp_helper.AmqpAgent):
                 if not conn.get_email():
                     conn.set_email(email)
                     self.db.update(conn)
-                    response['command'] = 'fetch_session'
-                    self.redirect(response, conn, 'SUBSCRIPTION_SERVICE')
+                    self.redirect({'command': 'fetch_session'}, conn, 'SUBSCRIPTION_SERVICE')
                 else:
 
                     # Validate subscriptions only if email is different
@@ -264,7 +263,7 @@ class RoutingService(amqp_helper.AmqpAgent):
             return
         socket, reply_queue = conn.get_socket()
         response = {
-            'command': 'disconnect'
+            'command': 'disconnect',
             'type': 'disconnect',
             'code': SESSION_TAKEN_OVER,}
         self.publish(

@@ -23,8 +23,11 @@ WILDCARD_SUBSCRIPTIONS_NOT_AVAILABLE = 0xA2
 
 UTF8_FORMAT = 1
 
+DEVICE_PREFIX = 'device/'
+
 env = {
-    'MESSAGE_SERVICE': None
+    'MESSAGE_SERVICE': None,
+    'ACCESS_CONTROL_SERVICE': None
 }
 
 for key in env:
@@ -42,7 +45,8 @@ class SubscriptionService(amqp_helper.AmqpAgent):
     def main(self, request, props):
         LOGGER.info('Fetching session with id %s', props.correlation_id)
         self.session = self.db.get(props.correlation_id)
-        pid_in_use = self.db.is_pid_in_use(self.session.get_id(), request.get('id'))
+        pid_in_use = (self.db.is_pid_in_use(self.session.get_id(), request.get('id')) 
+                      if self.session else False)
         command = request.get('command')
         del request['command']
         response = {}
@@ -57,7 +61,7 @@ class SubscriptionService(amqp_helper.AmqpAgent):
                 code = self._publish(request, props)
             if qos > 0:
                 response = {
-                    'command': 'forward'
+                    'command': 'forward',
                     'type': 'puback' if qos == 1 else 'pubrec',
                     'id': request.get('id'),
                     'code': code,}
@@ -110,12 +114,7 @@ class SubscriptionService(amqp_helper.AmqpAgent):
         elif command == 'reauthenticate':
             email = request.get('email')
             for sub in self.session.get_subs():
-                topic_filter = sub.get_topic_filter()
-
-                authorized = True
-                # Authorize (email, topic_filter)
-
-                if not authorized:
+                if not self.authorize_subscribe(email, sub.get_topic_filter()):
                     self.db.delete_sub(sub)
             self.session.set_email(email)
             self.db.update(self.session)
@@ -126,15 +125,11 @@ class SubscriptionService(amqp_helper.AmqpAgent):
                 queue=props.reply_to,
                 correlation_id=props.correlation_id)
 
-     def _publish(self, request, props):
+    def _publish(self, request, props):
 
         topic = request.get('topic')
-        email = self.session.get_email()
 
-        authorized = True
-        # Authorize publish
-
-        if not authorized:
+        if not self.authorize_publish(self.session.get_email(), topic):
             LOGGER.info('ERROR: %s: Not authorized to publish to the topic %s',
                         props.correlation_id, topic)
             return NOT_AUTHORIZED
@@ -188,11 +183,7 @@ class SubscriptionService(amqp_helper.AmqpAgent):
         LOGGER.info('%s: Subscribing on topic filter %s',
                     props.correlation_id, topic.get('filter'))
 
-        email = self.session.get_email()
-        authorized = True
-        # Authorize (email, topic_filter)
-
-        if not authorized:
+        if not self.authorize_subscribe(self.session.get_email(), topic.get('filter')):
             return NOT_AUTHORIZED
 
         topic['sub_id'] = request.get('properties').get('subscription_identifier') or 0
@@ -211,6 +202,25 @@ class SubscriptionService(amqp_helper.AmqpAgent):
 
         self.db.delete_sub(sub)
         return SUCCESS
+
+    def authorize_subscribe(self, email, topic):
+        return self.authorize(email, topic, True)
+
+    def authorize_publish(self, email, topic):
+        return self.authorize(email, topic, False)
+
+    def authorize(self, email, topic, read):
+        if not topic.startswith(DEVICE_PREFIX):
+            return True
+        request = {
+            'command': 'get_read_access' if read else 'get_write_access',
+            'user': email,
+            'resource': topic,}
+        response = self.rpc(
+            obj=request,
+            queue=env['ACCESS_CONTROL_SERVICE'])
+        return response.get('read_access' if read else 'write_access')
+
 
 
    

@@ -88,8 +88,12 @@ class AmqpAgent(threading.Thread):
                                                               inactivity_timeout=10):
             
             if not (method or properties or body): 
-                if self._closing: break
-                else: continue
+                LOGGER.info('Listening...')
+                if self._closing: 
+                    self._channel.cancel()
+                    break
+                
+                continue
 
             obj_str = body.decode('utf-8')
             obj = json.loads(obj_str, object_hook=as_bytes)
@@ -131,6 +135,50 @@ class AmqpAgent(threading.Thread):
             self._connection.add_callback_threadsafe(publish_method)
         else:
             publish_method()
+
+    def rpc(self, obj, queue, correlation_id=None):
+        result = self._channel.queue_declare(queue='', exclusive=True)
+        temp_queue = result.method.queue
+
+        self._lock.acquire()
+        self._lock.release()
+
+        obj_str = json.dumps(obj, cls=BytesEncoder)
+        body = obj_str.encode('utf-8')
+
+        LOGGER.info('Publishing on queue: %s, message: %s', queue, obj_str)
+
+        properties = pika.BasicProperties(
+            content_type='text/json', 
+            reply_to=temp_queue,
+            correlation_id=correlation_id,)
+
+        publish_method = functools.partial(
+            self._channel.basic_publish,
+            exchange='',
+            routing_key=queue,
+            body=body,
+            properties=properties)
+
+        if self.is_alive() and threading.currentThread().getName() != self.getName():
+            self._connection.add_callback_threadsafe(publish_method)
+        else:
+            publish_method()
+
+        body = None
+
+        for i in range(20):
+            time.sleep(0.2)
+            method, properties, body = self._channel.basic_get(temp_queue)
+            if body:
+                return
+        if not body:
+            raise Exception(f'Timeout expired. Service {queue} not available')
+
+        obj_str = body.decode('utf-8')
+        obj = json.loads(obj_str, object_hook=as_bytes)
+
+        return obj
 
     def main(self, request, properties):
         pass

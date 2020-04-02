@@ -17,7 +17,7 @@ services:
     environment:
       AMQP_URL: rabbitmq
       ROUTING_SERVICE: routing-service
-      OAUTH_URI_SERVICE: auth-service
+      OAUTH_URI_SERVICE: oauth-service
       SUBSCRIPTION_SERVICE: subscription-service
       MESSAGE_SERVICE: message-service
       DB_NAME: mydb
@@ -32,8 +32,8 @@ services:
       - ./oauth:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      OAUTH_URI_SERVICE: auth-service
-      ROUTING_SERVICE: auth-listener
+      OAUTH_URI_SERVICE: oauth-service
+      ROUTING_SERVICE: routing-service
       REDIRECT_URI: "https://127.0.0.1:55000/"
   subscriptions:
     build: ./subscriptions
@@ -43,6 +43,7 @@ services:
       AMQP_URL: rabbitmq
       SUBSCRIPTION_SERVICE: subscription-service
       MESSAGE_SERVICE: message-service
+      ACCESS_CONTROL_SERVICE: access-control-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root
@@ -55,6 +56,17 @@ services:
       AMQP_URL: rabbitmq
       MESSAGE_SERVICE: message-service
       ROUTING_SERVICE: routing-service
+      DB_NAME: mydb
+      DB_USER: root
+      DB_PASS: root
+      DB_HOST: conn_db
+  access_control:
+    build: ./access_control
+    volumes:
+      - ./access_control:/usr/src/app
+    environment:
+      AMQP_URL: rabbitmq
+      ACCESS_CONTROL_SERVICE: access-control-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root
@@ -73,16 +85,7 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
       POSTGRES_DB: mydb
-  session_db:
-    image: postgres:10-alpine
-    volumes:
-      - session-db-data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: root
-      POSTGRES_DB: mydb
 
 volumes:
   conn-db-data:
-  session-db-data:
 

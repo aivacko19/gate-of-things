@@ -36,7 +36,7 @@ class GatewayServer(server.Server):
         self.protocol.position(buff, position)
 
     def is_empty(self, buff):
-        self.protocol.empty(buff)
+        return self.protocol.empty(buff)
 
     def on_start(self):
         pass
@@ -45,7 +45,7 @@ class GatewayServer(server.Server):
         self.put_socket(socket)
 
     def on_disconnect(self, socket):
-        user_reference = self.sock2addr(socket)
+        user_reference = socket if isinstance(socket, str) else self.sock2addr(socket)
         packet = {'command': 'disconnect'}
         self.agent.publish(
             obj=packet,
@@ -62,12 +62,13 @@ class GatewayServer(server.Server):
 
             if self.protocol.still_loading(buff):
                 return
-
-            LOGGER.info('Client %s:%s - packet loaded', socket.getpeername())
+            addr = socket.getpeername()
+            LOGGER.info('Client %s:%s - packet loaded', addr[0], addr[1])
 
             packet, error = self.protocol.parse(buff)
             if error:
-                LOGGER.info('Client %s:%s - packet error, disconnecting', socket.getpeername())
+                addr = socket.getpeername()
+                LOGGER.info('Client %s:%s - packet error, disconnecting', addr[0], addr[1])
                 disconnect = True
                 buff = self.protocol.compose(packet)
                 break
@@ -87,7 +88,7 @@ class GatewayServer(server.Server):
     def on_write(self, socket):
         if self.socket_alive(socket):
             buff = self.protocol.new_stream()
-            self.register_read(client, buff)
+            self.register_read(socket, buff)
         else:
             self.unregister(socket)
             self.safe_close(socket)

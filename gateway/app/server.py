@@ -37,15 +37,18 @@ class Server:
             self.selector.get_key(socket)
             self.selector.unregister(socket)
         except KeyError:
-            LOGGER.error('Client %s:%s: %s', socket.getpeername(), 'Socket not registered.')
+            addr = socket.getpeername()
+            LOGGER.error('Client %s:%s: %s', addr[0], addr[1], 'Socket not registered.')
         except Exception as e:
-            LOGGER.error('Client %s:%s: %s', socket.getpeername(), e)
+            addr = socket.getpeername()
+            LOGGER.error('Client %s:%s: %s', addr[0], addr[1], e)
 
     def safe_close(self, socket):
         try:
             socket.close()
         except OSError as e:
-            LOGGER.error('Client %s:%s: %s', socket.getpeername(), e)
+            addr = socket.getpeername()
+            LOGGER.error('Client %s:%s: %s', addr[0], addr[1], e)
 
     def close(self):
         if self.selector is not None:
@@ -106,17 +109,18 @@ class Server:
 
                     if key.data is None:
                         client, addr = self.listener.accept()
-                        LOGGER.info('Client %s:%s - connecting', addr)
+                        LOGGER.info('Client %s:%s - connecting', addr[0], addr[1])
                         buff = self.get_empty_buffer()
-                        self.register_client(socket, buff, selectors.EVENT_READ)
-                        self.on_connect(socket)
+                        self.register_client(client, buff, selectors.EVENT_READ)
+                        self.on_connect(client)
 
                     else:
                         client = key.fileobj
                         buff = key.data
 
                         if mask is selectors.EVENT_READ:
-                            LOGGER.info('Client %s:%s - reading', client.getpeername())
+                            addr = client.getpeername()
+                            LOGGER.info('Client %s:%s - reading', addr[0], addr[1])
 
                             try:
                                 data = client.recv(4096)
@@ -124,7 +128,8 @@ class Server:
                                 # Resource temporarily unavailable (errno EWOULDBLOCK)
                                 continue
                             if not data:
-                                LOGGER.info('Client %s:%s - disconnecting', client.getpeername())
+                                addr = client.getpeername()
+                                LOGGER.info('Client %s:%s - disconnecting', addr[0], addr[1])
                                 self.on_disconnect(client)
                                 self.unregister(client)
                                 self.safe_close(client)
@@ -133,7 +138,8 @@ class Server:
                             self.on_read(client, data, buff)
 
                         elif mask is selectors.EVENT_WRITE:
-                            LOGGER.info('Client %s:%s - writing', client.getpeername())
+                            addr = client.getpeername()
+                            LOGGER.info('Client %s:%s - writing', addr[0], addr[1])
 
                             data = self.get_data(buff, 4096)
 
@@ -146,8 +152,11 @@ class Server:
                             self.set_position(buff, sent)
 
                             if not self.is_empty(buff):
+                                LOGGER.info('Client %s:%s - continue writing', addr[0], addr[1])
                                 continue
                             
+
+                            LOGGER.info('Client %s:%s - finish writing', addr[0], addr[1])
                             self.on_write(client)
 
                 self.loop()

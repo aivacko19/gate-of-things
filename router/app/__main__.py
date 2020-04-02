@@ -11,8 +11,7 @@ LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
 env = {
-    'ROUTING_SERVICE': None,
-    'VERIFICATION_SERVICE': None
+    'ROUTING_SERVICE': None
 }
 
 for key in env:

@@ -24,7 +24,7 @@ my_agent.start()
 
 api_gateway = gateway_server.GatewayServer(MY_HOSTNAME, protocol, my_agent)
 try:
-    api_gateway.start_listening()
+    api_gateway.start()
 except Exception as e:
     LOGGER.error(traceback.format_exc())
     api_gateway.close()

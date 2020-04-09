@@ -103,7 +103,6 @@ class SubscriptionService(amqp_helper.AmqpAgent):
         elif command == 'fetch_session':
             LOGGER.info('Received command get')
             response = {
-                'command': 'retreive_session',
                 'email': self.session.get_email() if self.session else None}
 
         elif command == 'create_session':

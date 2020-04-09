@@ -72,7 +72,49 @@ class RoutingService(amqp_helper.AmqpAgent):
                 if not conn.get_email():
                     conn.set_email(email)
                     self.db.update(conn)
-                    self.redirect({'command': 'fetch_session'}, conn, 'SUBSCRIPTION_SERVICE')
+                    obj = self.rpc(
+                        obj={'command': 'fetch_session'},
+                        queue=env['SUBSCRIPTION_SERVICE'],
+                        correlation_id=props.correlation_id,)
+                    email = obj.get('email')
+                    response = {
+                        'command': 'read',
+                        'type': 'connack',
+                        'code': SUCCESS,
+                        'session_present': bool(email) and not conn.get_clean_start(),
+                        'properties': {}}
+                    if conn.get_random_id():
+                        response['properties']['assigned_client_identifier'] = conn.get_id()
+
+                    command = None
+                    if not response['session_present']:
+                        command = 'create_session'
+                    elif conn.get_email() != email:
+                        command = 'reauthenticate'
+
+                    if command:
+                        session_response = {
+                            'command': command,
+                            'email': conn.get_email(),}
+                        self.redirect(session_response, conn, 'SUBSCRIPTION_SERVICE')
+
+                    if email.endswith('@device'):
+                        session_response = {
+                            'command': 'subscribe',
+                            'id': 0,
+                            'topics': [{
+                                'filter': 'device/%s/ctrl' % props.correlation_id,
+                                'max_qos': 2,
+                                'no_local': False,
+                                'retain_handling': 0,
+                                'retain_as_published': False}],
+                        }
+                        obj = self.rpc(
+                            obj=session_response,
+                            queue=env['SUBSCRIPTION_SERVICE'],
+                            correlation_id=props.correlation_id)
+
+
                 else:
 
                     # Validate subscriptions only if email is different
@@ -96,29 +138,6 @@ class RoutingService(amqp_helper.AmqpAgent):
                     'command': 'disconnect' if conn.get_email() else 'connack',
                     'type': 'disconnect',
                     'code': NOT_AUTHORIZED}
-
-        elif command == 'retreive_session':
-            email = request.get('email')
-            response = {
-                'command': 'read',
-                'type': 'connack',
-                'code': SUCCESS,
-                'session_present': bool(email) and not conn.get_clean_start(),
-                'properties': {}}
-            if conn.get_random_id():
-                response['properties']['assigned_client_identifier'] = conn.get_id()
-
-            command = None
-            if not response['session_present']:
-                command = 'create_session'
-            elif conn.get_email() != email:
-                command = 'reauthenticate'
-
-            if command:
-                session_response = {
-                    'command': command,
-                    'email': conn.get_email(),}
-                self.redirect(session_response, conn, 'SUBSCRIPTION_SERVICE')
 
         elif command == 'forward':
             response = request

@@ -22,7 +22,7 @@ CREATE_TABLE = """
 insert_keys = ['name', 'owner']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
-    INSERT INTO session ({", ".join(insert_keys)})
+    INSERT INTO device ({", ".join(insert_keys)})
     VALUES ({insert_values})
 """
 

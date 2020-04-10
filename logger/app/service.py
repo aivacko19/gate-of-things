@@ -43,28 +43,7 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = service
 
-def parse_token(token):
-    token = token_string.split()
-    if token[0] != SHARED_ACCESS_SIGNATURE or len(token) != 2:
-        return None
-
-    rawtoken = {}
-    for token_attr in token[1].split(str='&'):
-        token_attr_spl = token_attr.split(str='=')
-        if len(token_attr_spl) != 2:
-            return None
-
-        key = token_attr_spl[0]
-        value = token_attr_spl[1]
-
-        if key in result or key not in TOKEN_FIELDS:
-            return None
-
-        rawtoken[key] = value
-
-    return rawtoken
-
-class DeviceService(amqp_helper.AmqpAgent):
+class Service(amqp_helper.AmqpAgent):
 
     def __init__(self, queue, db):
         self.db = db

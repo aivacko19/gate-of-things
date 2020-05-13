@@ -22,9 +22,8 @@ LOGGER = logging.getLogger(__name__)
 env = {
     'OAUTH_URI_SERVICE': None,
     'SUBSCRIPTION_SERVICE': None,
-    'SUBSCRIPTION_SERVICE': None,
-    'SUBSCRIPTION_SERVICE': None,
     'MESSAGE_SERVICE': None,
+    'DEVICE_SERVICE': None,
 }
 
 for key in env:
@@ -98,7 +97,7 @@ class RoutingService(amqp_helper.AmqpAgent):
                             'email': conn.get_email(),}
                         self.redirect(session_response, conn, 'SUBSCRIPTION_SERVICE')
 
-                    if email.endswith('@device'):
+                    if conn.get_email().endswith('@device'):
                         session_response = {
                             'command': 'subscribe',
                             'id': 0,
@@ -168,7 +167,7 @@ class RoutingService(amqp_helper.AmqpAgent):
             # Connect
             elif packet_type == 'connect':
                 method = request['properties'].get('authentication_method')
-                if not method or method not in ['OAuth2.0']:
+                if not method or method not in ['OAuth2.0', 'SignatureValidation']:
                     response = {
                         'command': 'disconnect',
                         'type': 'connack',
@@ -189,6 +188,9 @@ class RoutingService(amqp_helper.AmqpAgent):
                     self.redirect(request, conn, 'MESSAGE_SERVICE')
                     if method == 'OAuth2.0':
                         self.redirect({'oauth_request': True}, conn, 'OAUTH_URI_SERVICE')
+                    elif method == 'SignatureValidation':
+                        request['command'] = 'authenticate'
+                        self.redirect(request, conn, 'DEVICE_SERVICE')
 
             # Protocol Error
             else:
@@ -235,7 +237,7 @@ class RoutingService(amqp_helper.AmqpAgent):
                     code = PROTOCOL_ERROR
                 elif (not method
                       or method != conn.get_method()
-                      or method not in ['OAuth2.0']):
+                      or method not in ['OAuth2.0', 'SignatureValidation']):
                     code = BAD_AUTHENTICATION_METHOD
 
                 if code:
@@ -247,6 +249,9 @@ class RoutingService(amqp_helper.AmqpAgent):
                     response['command'] = 'read'
                     if method == 'OAuth2.0':
                         self.redirect({'oauth_request': True}, conn, 'OAUTH_URI_SERVICE')
+                    elif method == 'SignatureValidation':
+                        request['command'] = 'authenticate'
+                        self.redirect(request, conn, 'DEVICE_SERVICE')
 
             # Subscription managment
             elif packet_type in ['publish', 'pubrel', 'subscribe', 'unsubscribe']:

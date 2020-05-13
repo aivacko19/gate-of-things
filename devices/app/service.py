@@ -2,8 +2,8 @@
 import os
 import time
 import logging
-import urllib
-import base64
+from urllib import parse
+from base64 import b64decode
 import nacl.encoding
 import nacl.signing
 import nacl.exceptions
@@ -43,21 +43,25 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = service
 
-def parse_token(token):
+def parse_token(token_string):
+    LOGGER.info(token_string)
     token = token_string.split()
+    LOGGER.info(token)
     if token[0] != SHARED_ACCESS_SIGNATURE or len(token) != 2:
         return None
 
     rawtoken = {}
-    for token_attr in token[1].split(str='&'):
-        token_attr_spl = token_attr.split(str='=')
+    for token_attr in token[1].split('&'):
+        LOGGER.info(token_attr)
+        token_attr_spl = token_attr.split('=', 1)
+        LOGGER.info(token_attr_spl)
         if len(token_attr_spl) != 2:
             return None
 
         key = token_attr_spl[0]
         value = token_attr_spl[1]
 
-        if key in result or key not in TOKEN_FIELDS:
+        if key in rawtoken or key not in TOKEN_FIELDS:
             return None
 
         rawtoken[key] = value
@@ -89,15 +93,18 @@ class DeviceService(amqp_helper.AmqpAgent):
         device_id = props.correlation_id
         device = self.db.select(device_id)
         if device is None:
+            LOGGER.info("No device found")
             return None
 
         resource_uri = request.get('username')
         if not resource_uri.endswith(device_id):
+            LOGGER.info("Wrong resource uri")
             return None
         
         token = request.get('password')
-        rawtoken = parse_token(token)
+        rawtoken = parse_token(token.decode('utf-8'))
         if rawtoken is None:
+            LOGGER.info("Wrong token format")
             return None
 
         signature = rawtoken.get('sig')
@@ -106,24 +113,28 @@ class DeviceService(amqp_helper.AmqpAgent):
         url_encoded_resource_uri = rawtoken.get('sr')
 
         if float(expiry) < time.time():
+            LOGGER.info("Expired")
             return None
 
-        if urllib.parse.quote_plus(resource_uri) != url_encoded_resource_uri:
+        if parse.quote_plus(resource_uri) != url_encoded_resource_uri:
+            LOGGER.info("Wrong url encoded resource format")
             return None
 
         message = '%s\n%s' % (url_encoded_resource_uri, expiry)
         b64key = device.get('key')
         if b64key is None:
+            LOGGER.info("No public key")
             return None
 
         if policy == 'ed25519':
             try:
                 verify_key = nacl.signing.VerifyKey(b64key, encoder=nacl.encoding.URLSafeBase64Encoder)
-                verify_key.verify(message.encode('utf-8'), base64.b64decode(signature))
+                verify_key.verify(message.encode('utf-8'), b64decode(signature))
             except nacl.exceptions.BadSignatureError:
                 LOGGER.info('Bad Signature')
                 return None
         else:
+            LOGGER.info("Algorithm not supported")
             return None
 
         email = '%s@device' % device_id
@@ -148,7 +159,7 @@ class DeviceService(amqp_helper.AmqpAgent):
         self.create_policy(response, props)
 
         # Enable owner to control
-        reponse = {
+        response = {
             'user': owner,
             'resource': resource_ctrl,
             'write': True

@@ -54,95 +54,11 @@ class Service(amqp_helper.AmqpAgent):
         del request['command']
         response = {}
 
-        if command == 'authenticate':
-            response['command'] = 'verify'
-            response['email'] = self.authenticate(request, props)
-
-        if response:
-            self.publish(
-                obj=response,
-                queue=props.reply_to,
-                correlation_id=props.correlation_id)
-
-    def authenticate(self, request, props):
-        device_id = props.correlation_id
-        device = self.db.select(device_id)
-        if device is None:
-            return None
-
-        resource_uri = request.get('username')
-        if not resource_uri.endswith(device_id):
-            return None
-        
-        token = request.get('password')
-        rawtoken = parse_token(token)
-        if rawtoken is None:
-            return None
-
-        signature = rawtoken.get('sig')
-        expiry = rawtoken.get('se')
-        policy = rawtoken.get('skn', 'ed25519')
-        url_encoded_resource_uri = rawtoken.get('sr')
-
-        if float(expiry) < time.time():
-            return None
-
-        if urllib.parse.quote_plus(resource_uri) != url_encoded_resource_uri:
-            return None
-
-        message = '%s\n%s' % (url_encoded_resource_uri, expiry)
-        b64key = device.get('key')
-        if b64key is None:
-            return None
-
-        if policy == 'ed25519':
-            try:
-                verify_key = nacl.signing.VerifyKey(b64key, encoder=nacl.encoding.URLSafeBase64Encoder)
-                verify_key.verify(message.encode('utf-8'), base64.b64decode(signature))
-            except nacl.exceptions.BadSignatureError:
-                LOGGER.info('Bad Signature')
-                return None
-        else:
-            return None
-
-        email = '%s@device' % device_id
-        resource = 'device/%s' % device_id
-        resource_ctrl = '%s/ctrl' % resource
-        owner = device.get('owner')
-
-        # Enable device to publish
-        response = {
-            'user': email,
-            'resource': resource,
-            'write': True,
-        }
-        self.create_policy(response, props)
-
-        # Enable device to be controled
-        response = {
-            'user': email,
-            'resource': resource_ctrl,
-            'read': True,
-        }
-        self.create_policy(response, props)
-
-        # Enable owner to control
-        reponse = {
-            'user': owner,
-            'resource': resource_ctrl,
-            'write': True
-        }
-        self.create_policy(response, props)
-
-        return email
-
-    def create_policy(self, request, props):
-        request['command'] = 'add_policy'
-        self.publish(
-            obj=request,
-            queue=env['ACCESS_CONTROL_SERVICE'],
-            correlation_id=props.correlation_id,)
-
+        if command == 'log':
+            user = request.get('user')
+            resource = request.get('resource')
+            action = request.get('action')
+            self.db.insert(user, resource, action)
 
 
 

@@ -86,7 +86,13 @@ class PolicyDB:
 
     def add(self, user, resource, read=False, write=False):
         cursor = self.connection.cursor()
-        cursor.execute(INSERT, (user, resource, read, write,))
+        cursor.execute(SELECT, (user, resource))
+        result = cursor.fetchone()
+        if result:
+            self.update(user, resource, read, write)
+        else:
+            cursor.execute(INSERT, (user, resource, read, write,))
+
 
     def get_resource(self, resource):
         cursor = self.connection.cursor()

@@ -14,14 +14,14 @@ ACCESS_TIME_INDEX = 4
 CREATE_TABLE = """
     CREATE TABLE IF NOT EXISTS log (
         id SERIAL PRIMARY KEY,
-        user VARCHAR(40),
+        client VARCHAR(40),
         resource VARCHAR(40),
         action VARCHAR(40),
         access_time TIMESTAMP
     );
 """
 
-insert_keys = ['user', 'resource', 'action']
+insert_keys = ['client', 'resource', 'action']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO log ({", ".join(insert_keys)}, access_time)
@@ -48,11 +48,11 @@ class DB:
     def insert(self, user, resource, action):
         cursor = self.connection.cursor()
         cursor.execute(INSERT, (user, resource, action,))
-        result = cursor.fetchone()
-        if result is None:
-            return None
+        # result = cursor.fetchone()
+        # if result is None:
+        #     return None
         
-        return result[0]
+        # return result[0]
 
     def select(self, resource):
         cursor = self.connection.cursor()

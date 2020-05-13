@@ -117,9 +117,18 @@ class Server:
                     else:
                         client = key.fileobj
                         buff = key.data
+                        LOGGER.info(client.fileno())
+                        if client.fileno() == -1:
+                            self.unregister(client)
+                            self.safe_close(client)
+                            continue
+
+                        # TODO Change address to file descriptor
+
 
                         if mask is selectors.EVENT_READ:
                             addr = client.getpeername()
+
                             LOGGER.info('Client %s:%s - reading', addr[0], addr[1])
 
                             try:
@@ -139,6 +148,7 @@ class Server:
 
                         elif mask is selectors.EVENT_WRITE:
                             addr = client.getpeername()
+                            
                             LOGGER.info('Client %s:%s - writing', addr[0], addr[1])
 
                             data = self.get_data(buff, 4096)

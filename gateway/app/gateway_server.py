@@ -45,14 +45,23 @@ class GatewayServer(server.Server):
         self.put_socket(socket)
 
     def on_disconnect(self, socket):
-        user_reference = socket if isinstance(socket, str) else self.sock2addr(socket)
+        user_reference = socket.fileno()
         packet = {'command': 'disconnect'}
         self.agent.publish(
             obj=packet,
             queue=env['ROUTING_SERVICE'],
-            correlation_id=user_reference)
+            correlation_id=str(user_reference))
         if user_reference in self.connections:
             del self.connections[user_reference]
+
+    def disconnect_fd(self, fd):
+        packet = {'command': 'disconnect'}
+        self.agent.publish(
+            obj=packet,
+            queue=env['ROUTING_SERVICE'],
+            correlation_id=str(fd))
+        if fd in self.connections:
+            del self.connections[fd]
 
     def on_read(self, socket, data, buff):
         disconnect = False
@@ -62,13 +71,11 @@ class GatewayServer(server.Server):
 
             if self.protocol.still_loading(buff):
                 return
-            addr = socket.getpeername()
-            LOGGER.info('Client %s:%s - packet loaded', addr[0], addr[1])
+            LOGGER.info('Client %s - packet loaded', socket.fileno())
 
             packet, error = self.protocol.parse(buff)
             if error:
-                addr = socket.getpeername()
-                LOGGER.info('Client %s:%s - packet error, disconnecting', addr[0], addr[1])
+                LOGGER.info('Client %s - packet error, disconnecting', socket.fileno())
                 disconnect = True
                 buff = self.protocol.compose(packet)
                 break
@@ -77,7 +84,7 @@ class GatewayServer(server.Server):
             self.agent.publish(
                 obj=packet,
                 queue=env['ROUTING_SERVICE'],
-                correlation_id=self.sock2addr(socket))
+                correlation_id=str(socket.fileno()))
 
         if disconnect:
             self.on_disconnect(socket)
@@ -94,20 +101,28 @@ class GatewayServer(server.Server):
             self.safe_close(socket)
 
     def loop(self):
-        packet, addr = self.agent.get()
+        packet, fd_str = self.agent.get()
         if not packet:
             return
+
+        fd = int(fd_str)
 
         command = packet.get('command')
         del packet['command']
 
-        client = self.get_socket(addr)
+        client = self.get_socket(fd)
+
         if not client:
-            self.on_disconnect(addr)
+            self.disconnect_fd(fd)
+            return
+        try:
+            client.getpeername()
+        except OSError:
+            self.disconnect_fd(fd)
             return
 
         if command == 'disconnect':
-            self.on_disconnect(addr)
+            self.disconnect_fd(fd)
 
         if packet:
             buff = self.protocol.compose(packet)
@@ -131,13 +146,10 @@ class GatewayServer(server.Server):
         return self.connections.get(addr, None)
 
     def put_socket(self, socket):
-        addr = self.sock2addr(socket)
-        self.connections[addr] = socket
+        self.connections[socket.fileno()] = socket
 
-    def socket_alive(self, addr):
-        if not isinstance(addr, str):
-            addr = self.sock2addr(addr)
-        return addr in self.connections
+    def socket_alive(self, socket):
+        return socket.fileno() in self.connections
 
     def sock2addr(self, socket):
         pair = socket.getpeername()

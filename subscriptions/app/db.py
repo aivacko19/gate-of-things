@@ -154,7 +154,7 @@ class SessionDB:
 
     def delete_sub(self, sub):
         cursor = self.connection.cursor()
-        cursor.execute(SELECT_SUB, (sub.get_session_id(), sub.get_topic_filter()))
+        cursor.execute(DELETE_SUB, (sub.get_session_id(), sub.get_topic_filter()))
 
     def get(self, cid):
         cursor = self.connection.cursor()
@@ -214,7 +214,7 @@ class SessionDB:
         cursor = self.connection.cursor()
         cursor.execute(UPDATE, (session.get_email(), session.get_id()))
 
-    def update_sub(self, session, sub):
+    def update_sub(self, sub):
         cursor = self.connection.cursor()
         cursor.execute(UPDATE_SUB, (
             sub.get('sub_id'),

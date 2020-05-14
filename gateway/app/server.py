@@ -109,7 +109,7 @@ class Server:
 
                     if key.data is None:
                         client, addr = self.listener.accept()
-                        LOGGER.info('Client %s:%s - connecting', addr[0], addr[1])
+                        LOGGER.info('Client %s - connecting', client.fileno())
                         buff = self.get_empty_buffer()
                         self.register_client(client, buff, selectors.EVENT_READ)
                         self.on_connect(client)
@@ -118,18 +118,21 @@ class Server:
                         client = key.fileobj
                         buff = key.data
 
+                        # TODO Change address to file descriptor
+
+
                         if mask is selectors.EVENT_READ:
-                            addr = client.getpeername()
-                            LOGGER.info('Client %s:%s - reading', addr[0], addr[1])
+                            LOGGER.info('Client %s - reading', client.fileno())
 
                             try:
                                 data = client.recv(4096)
                             except BlockingIOError:
                                 # Resource temporarily unavailable (errno EWOULDBLOCK)
                                 continue
+                            except ConnectionResetError:
+                                continue
                             if not data:
-                                addr = client.getpeername()
-                                LOGGER.info('Client %s:%s - disconnecting', addr[0], addr[1])
+                                LOGGER.info('Client %s - disconnecting', client.fileno())
                                 self.on_disconnect(client)
                                 self.unregister(client)
                                 self.safe_close(client)
@@ -138,8 +141,7 @@ class Server:
                             self.on_read(client, data, buff)
 
                         elif mask is selectors.EVENT_WRITE:
-                            addr = client.getpeername()
-                            LOGGER.info('Client %s:%s - writing', addr[0], addr[1])
+                            LOGGER.info('Client %s - writing', client.fileno())
 
                             data = self.get_data(buff, 4096)
 

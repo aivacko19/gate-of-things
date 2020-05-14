@@ -27,7 +27,8 @@ DEVICE_PREFIX = 'device/'
 
 env = {
     'MESSAGE_SERVICE': None,
-    'ACCESS_CONTROL_SERVICE': None
+    'ACCESS_CONTROL_SERVICE': None,
+    'LOGGER_SERVICE': None
 }
 
 for key in env:
@@ -159,6 +160,10 @@ class SubscriptionService(amqp_helper.AmqpAgent):
                 if sub.get_sub_id():
                     client_map[cid]['properties']['subscription_identifier'].append(sub.get_sub_id())
             else:
+                email = self.db.get(cid).get_email()
+                resource = sub.get_topic_filter()
+                self.log_action(email, resource, 'publish')
+
                 response = request.copy()
                 response['topic'] = sub.get_topic_filter()
                 response['qos'] = min(request.get('qos'), sub.get_max_qos())
@@ -185,7 +190,12 @@ class SubscriptionService(amqp_helper.AmqpAgent):
         if not self.authorize_subscribe(self.session.get_email(), topic.get('filter')):
             return NOT_AUTHORIZED
 
-        topic['sub_id'] = request.get('properties').get('subscription_identifier') or 0
+        self.log_action(self.session.get_email(), topic_filter, 'subscribe')
+
+        if request.get('properties'):
+            topic['sub_id'] = request.get('properties').get('subscription_identifier') or 0
+        else:
+            topic['sub_id'] = 0
         topic['session_id'] = self.session.get_id()
         self.db.add_sub(self.session, topic)
         return topic.get('max_qos')
@@ -198,6 +208,8 @@ class SubscriptionService(amqp_helper.AmqpAgent):
 
         if not sub:
             return NO_SUBSCRIPTION_EXISTED
+        else:
+            self.log_action(self.session.get_email(), topic.get('filter'), 'unsubscribe')
 
         self.db.delete_sub(sub)
         return SUCCESS
@@ -219,6 +231,21 @@ class SubscriptionService(amqp_helper.AmqpAgent):
             obj=request,
             queue=env['ACCESS_CONTROL_SERVICE'])
         return response.get('read_access' if read else 'write_access')
+
+    def log_action(self, email, resource, action):
+
+        if not resource.startswith(DEVICE_PREFIX):
+            return
+
+        response = {
+            'command': 'log',
+            'user': email,
+            'resource': resource,
+            'action': action,}
+
+        self.publish(
+            obj=response,
+            queue=env['LOGGER_SERVICE'],)
 
 
 

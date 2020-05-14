@@ -10,6 +10,8 @@ services:
     environment:
       AMQP_URL: rabbitmq
       ROUTING_SERVICE: routing-service
+    depends_on:
+      - "rabbitmq"
   router:
     build: ./router
     volumes:
@@ -20,10 +22,14 @@ services:
       OAUTH_URI_SERVICE: oauth-service
       SUBSCRIPTION_SERVICE: subscription-service
       MESSAGE_SERVICE: message-service
+      DEVICE_SERVICE: device-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root
       DB_HOST: conn_db
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
   oauth:
     build: ./oauth
     ports:
@@ -35,6 +41,9 @@ services:
       OAUTH_URI_SERVICE: oauth-service
       ROUTING_SERVICE: routing-service
       REDIRECT_URI: "https://127.0.0.1:55000/"
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
   subscriptions:
     build: ./subscriptions
     volumes:
@@ -44,10 +53,14 @@ services:
       SUBSCRIPTION_SERVICE: subscription-service
       MESSAGE_SERVICE: message-service
       ACCESS_CONTROL_SERVICE: access-control-service
+      LOGGER_SERVICE: logger-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root
       DB_HOST: conn_db
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
   messages:
     build: ./messages
     volumes:
@@ -60,6 +73,9 @@ services:
       DB_USER: root
       DB_PASS: root
       DB_HOST: conn_db
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
   access_control:
     build: ./access_control
     volumes:
@@ -71,6 +87,39 @@ services:
       DB_USER: root
       DB_PASS: root
       DB_HOST: conn_db
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
+  devices:
+    build: ./devices
+    volumes:
+      - ./devices:/usr/src/app
+    environment:
+      AMQP_URL: rabbitmq
+      DEVICE_SERVICE: device-service
+      ACCESS_CONTROL_SERVICE: access-control-service
+      DB_NAME: mydb
+      DB_USER: root
+      DB_PASS: root
+      DB_HOST: conn_db
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
+  logger:
+    build: ./logger
+    volumes:
+      - ./logger:/usr/src/app
+    environment:
+      AMQP_URL: rabbitmq
+      MY_SERVICE: logger-service
+      ACCESS_CONTROL_SERVICE: access-control-service
+      DB_NAME: mydb
+      DB_USER: root
+      DB_PASS: root
+      DB_HOST: conn_db
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
   rabbitmq:
     image: rabbitmq:3.8-alpine
     ports:

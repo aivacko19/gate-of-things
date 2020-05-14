@@ -11,7 +11,7 @@ LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
 env = {
-    'DEVICE_SERVICE': None,
+    'MY_SERVICE': None,
 }
 
 for key in env:
@@ -24,9 +24,9 @@ DB_NAME = os.environ.get('DB_NAME', 'mydb')
 DB_USER = os.environ.get('DB_USER', 'root')
 DB_PASS = os.environ.get('DB_PASS', 'root')
 DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
-mydb = db.DeviceDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
+mydb = db.DB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
 
-service_agent = service.DeviceService(env['DEVICE_SERVICE'], mydb)
+service_agent = service.Service(env['MY_SERVICE'], mydb)
 service_agent.start()
 
 try:

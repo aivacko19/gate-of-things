@@ -20,6 +20,7 @@ PAYLOAD_FORMAT_INVALID = 0X99
 LOGGER = logging.getLogger(__name__)
 
 env = {
+    'ROUTING_SERVICE': None,
     'OAUTH_URI_SERVICE': None,
     'SUBSCRIPTION_SERVICE': None,
     'MESSAGE_SERVICE': None,
@@ -248,7 +249,9 @@ class RoutingService(amqp_helper.AmqpAgent):
                 else:
                     response['command'] = 'read'
                     if method == 'OAuth2.0':
-                        self.redirect({'oauth_request': True}, conn, 'OAUTH_URI_SERVICE')
+                        self.redirect({
+                            'oauth_request': True,
+                            'queue': env['ROUTING_SERVICE']}, conn, 'OAUTH_URI_SERVICE')
                     elif method == 'SignatureValidation':
                         request['command'] = 'authenticate'
                         self.redirect(request, conn, 'DEVICE_SERVICE')

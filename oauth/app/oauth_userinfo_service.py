@@ -29,7 +29,9 @@ def index():
 
     # Get Code
     code = flask.request.args.get("code")
-    user_reference = flask.request.args.get("state")
+    state_str = flask.request.args.get("state")
+    state = json.loads(state_str)
+    user_reference = state.get('user_reference')
 
     # Get Token with Code
     provider_cfg = provider.get_cfg()
@@ -59,16 +61,19 @@ def index():
         response = ("User email not available or not verified by Google.", 400)
     else:
         email = userinfo["email"]
-        response = (
-            "<p>You logged in! You're a Legend! Email: {}</p>"
-            "<p>Check your MQTT Connection</p>".format(email))
+        if state.get('redirect_url'):
+            response = flask.redirect(state.get('redirect_url'))
+        else:
+            response = (
+                "<p>You logged in! You're a Legend! Email: {}</p>"
+                "<p>Check your MQTT Connection</p>".format(email))
 
     request = {
         'command': 'verify',
         'email': email}
     my_agent.publish(
         obj=request, 
-        queue=env['ROUTING_SERVICE'], 
+        queue=state.get('queue'), 
         correlation_id=user_reference,)
 
     return response

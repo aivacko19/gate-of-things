@@ -43,7 +43,6 @@ services:
       REDIRECT_URI: "https://127.0.0.1:55000/"
     depends_on:
       - "rabbitmq"
-      - "conn_db"
   subscriptions:
     build: ./subscriptions
     volumes:
@@ -134,6 +133,23 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
       POSTGRES_DB: mydb
+  manager:
+    build: ./manager
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./manager:/usr/src/app
+    environment:
+      AMQP_URL: rabbitmq
+      MANAGER_SERVICE: manager-service
+      OAUTH_URI_SERVICE: oauth-service
+      DB_NAME: mydb
+      DB_USER: root
+      DB_PASS: root
+      DB_HOST: conn_db
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
 
 volumes:
   conn-db-data:

@@ -173,7 +173,7 @@ class AmqpAgent(threading.Thread):
             if body:
                 break
         if not body:
-            raise Exception(f'Timeout expired. Service {queue} not available')
+            raise Exception("Timeout expired. Service %s not available" % queue)
 
         obj_str = body.decode('utf-8')
         obj = json.loads(obj_str, object_hook=as_bytes)

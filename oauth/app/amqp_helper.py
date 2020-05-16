@@ -171,9 +171,9 @@ class AmqpAgent(threading.Thread):
             time.sleep(0.2)
             method, properties, body = self._channel.basic_get(temp_queue)
             if body:
-                return
+                break
         if not body:
-            raise Exception(f'Timeout expired. Service {queue} not available')
+            raise Exception("Timeout expired. Service %s not available" % queue)
 
         obj_str = body.decode('utf-8')
         obj = json.loads(obj_str, object_hook=as_bytes)

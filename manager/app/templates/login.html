@@ -1,0 +1,15 @@
+{% extends "bootstrap/base.html" %}
+{% block title %}This is an example page{% endblock %}
+
+{% block navbar %}
+<div class="navbar navbar-fixed-top">
+  <!-- ... -->
+</div>
+{% endblock %}
+
+{% block content %}
+	<a href="{{ url_for('login') }}" class="btn btn-primary" role='button'>Login</a>
+	<form method='get' action="{{ url_for('login') }}">
+		<input type="submit" class="btn btn-primary" value="Login with Google" />
+	</form>
+{% endblock %}

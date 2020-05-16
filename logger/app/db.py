@@ -26,6 +26,7 @@ insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO log ({", ".join(insert_keys)}, access_time)
     VALUES ({insert_values}, CURRENT_TIMESTAMP)
+    RETURNING id
 """
 
 SELECT = """
@@ -48,11 +49,11 @@ class DB:
     def insert(self, user, resource, action):
         cursor = self.connection.cursor()
         cursor.execute(INSERT, (user, resource, action,))
-        # result = cursor.fetchone()
-        # if result is None:
-        #     return None
+        result = cursor.fetchone()
+        if result is None:
+            return None
         
-        # return result[0]
+        return result[0]
 
     def select(self, resource):
         cursor = self.connection.cursor()

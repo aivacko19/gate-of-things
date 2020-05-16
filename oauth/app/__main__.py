@@ -25,5 +25,5 @@ HOST = os.environ.get("HOST", "localhost")
 
 uri_service = OAuthUriService(env['OAUTH_URI_SERVICE'], env['REDIRECT_URI'])
 uri_service.start()
-userinfo_service.run(host=HOST, ssl_context="adhoc")
+userinfo_service.run(host=HOST, ssl_context=('cert.pem', 'key.pem'))
 uri_server.close()

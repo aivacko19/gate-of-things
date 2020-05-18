@@ -8,8 +8,18 @@
 {% endblock %}
 
 {% block content %}
-	<a href="{{ url_for('login') }}" class="btn btn-primary" role='button'>Login</a>
-	<form method='get' action="{{ url_for('login') }}">
-		<input type="submit" class="btn btn-primary" value="Login with Google" />
-	</form>
+	<div class="container">
+		{% if failed %}
+			<div class="row">
+				<div class="col-md-12">
+					<p>Failed to Login! Please try again</p>
+				</div>
+			</div>
+		{% endif %}
+		<div class="jumbotron">
+			<div class='center'>
+				<a href="{{ url_for('login') }}" class="btn btn-primary" role='button'>Login</a>
+			</div>
+		</div>
+	</div>
 {% endblock %}

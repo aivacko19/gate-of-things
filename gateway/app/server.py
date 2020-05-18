@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import socket
+import ssl
 import selectors
 import logging
 import os 
@@ -94,6 +95,9 @@ class Server:
         pass
 
     def start(self):
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain(certfile='cert.pem', keyfile='key.pem')
+
         self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listener.bind((self.host, self.protocol.port))
@@ -108,7 +112,8 @@ class Server:
                 for key, mask in events:
 
                     if key.data is None:
-                        client, addr = self.listener.accept()
+                        sock, addr = self.listener.accept()
+                        client = context.wrap_socket(sock, server_side=True)
                         LOGGER.info('Client %s - connecting', client.fileno())
                         buff = self.get_empty_buffer()
                         self.register_client(client, buff, selectors.EVENT_READ)

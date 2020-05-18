@@ -47,6 +47,11 @@ SELECT = """
     WHERE cid = %s
 """
 
+SELECT_EMAIL = """
+    SELECT * FROM session
+    WHERE email = %s
+"""
+
 SELECT_SUB = """
     SELECT topic_filter, subscription_id, max_qos, 
     no_local, retain_as_published, retain_handling, session_id
@@ -67,6 +72,13 @@ SELECT_MATCHING_SUBS = """
     no_local, retain_as_published, retain_handling, session_id
     FROM subscription
     WHERE topic_filter = %s
+"""
+
+SELECT_SUBSCRIBED_USERS = """
+    SELECT DISTINCT email
+    FROM session, subscription
+    WHERE cid = session_id
+    AND topic_filter = %s
 """
 
 SELECT_PACKET_IDS = """
@@ -156,6 +168,17 @@ class SessionDB:
         cursor = self.connection.cursor()
         cursor.execute(DELETE_SUB, (sub.get_session_id(), sub.get_topic_filter()))
 
+    def delete_sub_by_email_and_topic(self, email, topic):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_EMAIL, (email,))
+        result = cursor.fetchone()
+        if not result:
+            return 0
+
+        cursor = self.connection.cursor()
+        cursor.execute(DELETE_SUB, (result[1], topic,))
+        return cursor.rowcount
+
     def get(self, cid):
         cursor = self.connection.cursor()
         LOGGER.info('Executing SELECT statement for table "session"')
@@ -185,6 +208,16 @@ class SessionDB:
         subs = list()
         for sub in result:
             subs.append(Subscription(sub))
+        return subs
+
+    def get_subscribed_users(self, topic):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_SUBSCRIBED_USERS, (topic,))
+        result = cursor.fetchall()
+        subs = list()
+        for row in result:
+            subs.append(row[0])
+
         return subs
 
 

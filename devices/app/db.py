@@ -19,16 +19,21 @@ CREATE_TABLE = """
     );
 """
 
-insert_keys = ['name', 'owner']
+insert_keys = ['name', 'owner', 'key']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO device ({", ".join(insert_keys)})
-    VALUES ({insert_values})
+    VALUES ({insert_values}) RETURNING id
 """
 
 SELECT = """
     SELECT * FROM device
     WHERE name = %s
+"""
+
+SELECT_OWNER = """
+    SELECT * FROM device
+    WHERE owner = %s
 """
 
 UPDATE = """
@@ -54,9 +59,9 @@ class DeviceDB:
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)
 
-    def insert(self, name, owner):
+    def insert(self, name, owner, key):
         cursor = self.connection.cursor()
-        cursor.execute(INSERT, (name, owner))
+        cursor.execute(INSERT, (name, owner, key))
         result = cursor.fetchone()
         if result is None:
             return None
@@ -79,20 +84,34 @@ class DeviceDB:
 
         return device
 
+    def select_by_owner(self, owner):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_OWNER, (owner,))
+        result = cursor.fetchall()
+
+        if not result:
+            return {}
+
+        devices = {}
+        for row in result:
+            device = {
+                'id': row[ID_INDEX],
+                'name': row[NAME_INDEX],
+                'owner': row[OWNER_INDEX],
+                'key': row[KEY_INDEX],
+            }
+            devices[device['name']] = device
+
+        return devices
+
     def update(self, name, key):
         cursor = self.connection.cursor()
         cursor.execute(UPDATE, (key, name,))
-        result = cursor.fetchone()
-        if result is None:
-            return None
-
-        return result[0]
+        
+        return cursor.rowcount
 
     def delete(self, name):
         cursor = self.connection.cursor()
         cursor.execute(DELETE, (name,))
-        result = cursor.fetchone()
-        if result is None:
-            return None
 
-        return result[0]
+        return cursor.rowcount

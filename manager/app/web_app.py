@@ -6,6 +6,7 @@ import logging
 from flask import Flask, render_template, session, redirect, url_for, request
 import requests
 from flask_bootstrap import Bootstrap
+import base64
 
 import service
 import db
@@ -23,6 +24,10 @@ app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 env = {
     'MANAGER_SERVICE': None,
     'OAUTH_URI_SERVICE': None,
+    'DEVICE_SERVICE': None,
+    'ACCESS_CONTROL_SERVICE': None,
+    'SUBSCRIPTION_SERVICE': None,
+    'LOGGER_SERVICE': None
 }
 
 for key in env:
@@ -31,51 +36,333 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = env_var
 
-DB_NAME = os.environ.get('DB_NAME', 'mydb')
-DB_USER = os.environ.get('DB_USER', 'root')
-DB_PASS = os.environ.get('DB_PASS', 'root')
-DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
-mydb = db.DB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
-
-my_service = service.Service(env['MANAGER_SERVICE'], mydb)
-my_service.connect()
-my_service.start()
+var = {}
+my_agent = amqp_helper.AmqpAgent()
+my_agent.connect()
 
 @app.route("/")
 def index():
     failed_to_login = False
     if 'username' not in session:
         if 'temp_id' not in session:
-            temp_id = mydb.new()
+            temp_id = var['mydb'].new()
             session['temp_id'] = temp_id
         else:
-            result = mydb.get(session['temp_id'])
+            result = var['mydb'].get(session['temp_id'])
             username = result.get('username')
             failed_to_login = result.get('failed')
             if username:
                 session['username'] = username
-                mydb.delete(session['temp_id'])
+                var['mydb'].delete(session['temp_id'])
                 del session['temp_id']
 
     if 'username' not in session:
         return render_template('login.html', failed=failed_to_login)
 
+    if 'devices' not in session:
+        my_request = {
+            'command': 'get_devices',
+            'owner': session['username']
+        }
+        response = rpc(my_request, 'DEVICE_SERVICE')
+        session['devices'] = response['devices']
 
+    devices = session['devices']
 
-    return render_template('hello.html')
+    return render_template('devices.html', devices=devices)
 
 @app.route("/login/")
 def login():
+    if 'username' in session:
+        return redirect(url_for('index'))
+
     my_request = {
         'oauth_request': True,
         'redirect_url': request.url_root,
         'queue': env['MANAGER_SERVICE'],}
-    response = my_service.rpc(
+    response = my_agent.rpc(
         obj=my_request,
         queue=env['OAUTH_URI_SERVICE'],
         correlation_id=str(session['temp_id']))
 
     return redirect(response.get('uri'))
+
+@app.route("/logout/")
+def logout():
+    session.pop('username', None)
+    return redirect(url_for('index'))
+
+@app.route("/<device_name>/")
+def details(device_name):
+    LOGGER.info(session['devices'])
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+    return render_template('details.html', device=device)
+
+@app.route("/<device_name>/delete/")
+def delete_device(device_name):
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+
+    my_request = {
+        'command': 'delete_device',
+        'name': device_name
+    }
+    response = rpc(my_request, 'DEVICE_SERVICE')
+
+    del session['devices'][device_name]
+
+    return render_template('devices.html', devices=session['devices'])
+
+@app.route("/<device_name>/change_key/", methods=['POST', 'GET'])
+def change_key(device_name):
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+    if request.method == 'GET':
+        return render_template('change_key.html', device=device)
+    
+    new_key = request.form['new_key']
+    decoded_key = base64.b64decode(new_key)
+    if len(decoded_key) != 32:
+        return render_template('change_key.html', device=device, error=True)
+
+    my_request = {
+        'command': 'change_key',
+        'name': device_name,
+        'key': new_key
+    }
+    response = rpc(my_request, 'DEVICE_SERVICE')
+
+    session['devices'][device_name]['key'] = new_key
+
+    return render_template('details.html', device=device)
+
+
+
+@app.route("/new/", methods=['POST', 'GET'])
+def new_device():
+    if 'username' not in session:
+        return redirect(url_for('index'))
+
+    if request.method == "GET":
+        return render_template('new_device.html')
+
+    name = request.form['name']
+    key = request.form['key']
+
+    error_name = False
+    error_key = False
+
+    my_request = {
+        'command': 'get',
+        'name': name
+    }
+    response = rpc(my_request, 'DEVICE_SERVICE')
+    device = response.get('device')
+
+    if device is not None:
+        error_name = True
+
+    decoded_key = base64.b64decode(key)
+    if len(decoded_key) != 32:
+        error_key = True
+
+    if error_name or error_key:
+        return render_template('new_device.html', device=device, 
+            error_key=error_key, error_name=error_name)
+
+    my_request = {
+        'command': 'add',
+        'name': name,
+        'owner': session['username'],
+        'key': key
+    }
+    response = rpc(my_request, 'DEVICE_SERVICE')
+
+    device = {
+        'id': response['id'],
+        'name': name,
+        'owner': session['username'],
+        'key': key
+    }
+
+    session['devices'][name] = device
+    LOGGER.info(session['devices'])
+
+    return render_template('details.html', device=device)
+
+@app.route("/<device_name>/policies/")
+def policies(device_name):
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+    resource = 'device/%s' % device_name
+
+    if 'policies' not in device:
+        my_request = {
+            'command': 'get_resource',
+            'resource': resource
+        }
+        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+        session['devices'][device_name]['policies'] = response.get('policies')
+
+    policies = session['devices'][device_name]['policies']
+
+    return render_template('policies.html', device=device, policies=policies)
+
+@app.route("/<device_name>/policies/<user>/delete/")
+def delete_policy(device_name, user):
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+    resource = 'device/%s' % device_name
+
+    if 'policies' not in device:
+        my_request = {
+            'command': 'get_resource',
+            'resource': resource
+        }
+        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+        session['devices'][device_name]['policies'] = response.get('policies')
+
+    policies = session['devices'][device_name]['policies']
+
+    if user in policies:
+        del session['devices'][device_name]['policies'][user]
+
+        my_request = {
+            'command': 'delete_policy',
+            'resource': resource,
+            'user': user
+        }
+        publish(my_request, 'ACCESS_CONTROL_SERVICE')
+
+    return redirect(url_for('policies', device_name=device_name))
+
+@app.route("/<device_name>/policies/new_policy/", methods=["POST", "GET"])
+def new_policy(device_name):
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+    resource = 'device/%s' % device_name
+
+    if 'policies' not in device:
+        my_request = {
+            'command': 'get_resource',
+            'resource': resource
+        }
+        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+        session['devices'][device_name]['policies'] = response.get('policies')
+
+    policies = session['devices'][device_name]['policies']
+
+    if request.method == 'GET':
+        return render_template('new_policy.html', device=device)
+
+    user = request.form.get('user')
+    read = 'read' in request.form and request.form.get('read') == 'on'
+    write = 'write' in request.form and request.form.get('write') == 'on'
+
+    if user in policies:
+        return render_template('new_policy.html', device=device, error_name=True)
+
+    my_request = {
+        'command': 'add_policy',
+        'resource': resource,
+        'user': user,
+        'read': read,
+        'write': write,
+    }
+    publish(my_request, "ACCESS_CONTROL_SERVICE")
+
+    session['devices'][device_name]['policies'][user] = {
+        'user': user,
+        'read': read,
+        'write': write,
+    }
+
+    return redirect(url_for('policies', device_name=device_name))
+
+@app.route('/<device_name>/subscriptions/')
+def subscriptions(device_name):
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+    topic = 'device/%s' % device_name
+
+    my_request = {
+        'command': 'get_subscriptions',
+        'topic': topic,
+    }
+    response = rpc(my_request, "SUBSCRIPTION_SERVICE")
+    subscriptions = response['subscriptions']
+
+    return render_template('subscriptions.html', device=device, subscriptions=subscriptions)
+
+@app.route('/device/<device_name>/subscriptions/<user>/delete_subscription/')
+def delete_subscription(device_name, user):
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+    topic = 'device/%s' % device_name
+
+    my_request = {
+        'command': 'delete_subscription',
+        'topic': topic,
+        'email': user
+    }
+    response = rpc(my_request, "SUBSCRIPTION_SERVICE")
+
+    return redirect(url_for('subscriptions', device_name=device_name))
+
+@app.route('/device/<device_name>/log/')
+def log(device_name):
+    device = get_device(device_name)
+    if device is None:
+        return redirect(url_for('index'))
+
+    resource = 'device/%s' % device_name
+
+    my_request = {
+        'command': 'get_logs',
+        'resource': resource,
+    }
+    response = rpc(my_request, "LOGGER_SERVICE")
+    logs = response['logs']
+
+    return render_template('log.html', device=device, logs=logs)
+
+def get_device(device_name):
+    if 'username' not in session:
+        return None
+
+    devices = session.get('devices')
+
+    if device_name not in devices:
+        return None
+
+    return devices[device_name]
+
+def rpc(request, service):
+    return my_agent.rpc(
+        obj=request,
+        queue=env[service])
+
+def publish(request, service):
+    return my_agent.publish(
+        obj=request,
+        queue=env[service])
 
 
 

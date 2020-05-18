@@ -59,6 +59,18 @@ class Service(amqp_helper.AmqpAgent):
             resource = request.get('resource')
             action = request.get('action')
             self.db.insert(user, resource, action)
+        elif command == 'get_logs':
+            resource = request.get('resource')
+            logs = self.db.select(resource)
+            response['logs'] = logs
+
+        
+        if response:
+            self.publish(
+                obj=response,
+                queue=props.reply_to,
+                correlation_id=props.correlation_id)
+
 
 
 

@@ -70,7 +70,7 @@ class DB:
                 'user': row[USER_INDEX],
                 'resource': row[RESOURCE_INDEX],
                 'action': row[ACTION_INDEX],
-                'access_time': row[ACCESS_TIME_INDEX],
+                'access_time': str(row[ACCESS_TIME_INDEX]),
             }
 
             logs.append(log)

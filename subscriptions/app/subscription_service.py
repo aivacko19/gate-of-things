@@ -44,10 +44,12 @@ class SubscriptionService(amqp_helper.AmqpAgent):
         amqp_helper.AmqpAgent.__init__(self, queue)
 
     def main(self, request, props):
-        LOGGER.info('Fetching session with id %s', props.correlation_id)
-        self.session = self.db.get(props.correlation_id)
-        pid_in_use = (self.db.is_pid_in_use(self.session.get_id(), request.get('id')) 
-                      if self.session else False)
+        pid_in_use = False
+        if props.correlation_id:
+            LOGGER.info('Fetching session with id %s', props.correlation_id)
+            self.session = self.db.get(props.correlation_id)
+            pid_in_use = (self.db.is_pid_in_use(self.session.get_id(), request.get('id')) 
+                          if self.session else False)
         command = request.get('command')
         del request['command']
         response = {}
@@ -118,6 +120,15 @@ class SubscriptionService(amqp_helper.AmqpAgent):
                     self.db.delete_sub(sub)
             self.session.set_email(email)
             self.db.update(self.session)
+        elif command == 'get_subscriptions':
+            topic = request.get('topic')
+            subscriptions = self.db.get_subscribed_users(topic)
+            response['subscriptions'] = subscriptions
+        elif command == 'delete_subscription':
+            topic = request.get('topic')
+            email = request.get('email')
+            result = self.db.delete_sub_by_email_and_topic(email, topic)
+            response['result'] = result
 
         if response:
             self.publish(

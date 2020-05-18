@@ -62,8 +62,11 @@ class AccessControlService(amqp_helper.AmqpAgent):
             response = {'write_access': write_access,}
 
         elif command == 'get_resource':
+            LOGGER.info('We are here')
             resource = request.get('resource')
-            response = self.db.get_resource(resource)
+            policies = self.db.get_resource(resource)
+            LOGGER.info(policies)
+            response['policies'] = policies
 
         if response:
             self.publish(

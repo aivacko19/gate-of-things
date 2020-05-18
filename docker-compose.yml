@@ -143,6 +143,10 @@ services:
       AMQP_URL: rabbitmq
       MANAGER_SERVICE: manager-service
       OAUTH_URI_SERVICE: oauth-service
+      DEVICE_SERVICE: device-service
+      ACCESS_CONTROL_SERVICE: access-control-service
+      SUBSCRIPTION_SERVICE: subscription-service
+      LOGGER_SERVICE: logger-service
       DB_NAME: mydb
       DB_USER: root
       DB_PASS: root

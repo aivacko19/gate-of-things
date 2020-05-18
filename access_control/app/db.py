@@ -97,14 +97,18 @@ class PolicyDB:
     def get_resource(self, resource):
         cursor = self.connection.cursor()
         cursor.execute(SELECT_RESOURCE, (resource,))
-        result = cursor.fetchone()
-        policy = list()
+        result = cursor.fetchall()
+        if not result:
+            return {}
+            
+        policies = {}
         for row in result:
-            policy.append({
+            policy = {
                 'user': row[USER_INDEX],
                 'read': row[READ_INDEX],
-                'write': row[WRITE_INDEX],})
-        return policy
+                'write': row[WRITE_INDEX],}
+            policies[row[USER_INDEX]] = policy
+        return policies
 
     def can_read(self, user, resource):
         cursor = self.connection.cursor()

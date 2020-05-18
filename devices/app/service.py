@@ -82,6 +82,32 @@ class DeviceService(amqp_helper.AmqpAgent):
         if command == 'authenticate':
             response['command'] = 'verify'
             response['email'] = self.authenticate(request, props)
+        elif command == 'get_devices':
+            owner = request.get('owner')
+            devices = self.db.select_by_owner(owner)
+            response['devices'] = devices
+        elif command == 'delete_device':
+            name = request.get('name')
+            result = self.db.delete(name)
+            response['rowcount'] = result
+        elif command == 'change_key':
+            name = request.get('name')
+            key = request.get('key')
+            result = self.db.update(name, key)
+            if result:
+                response['result'] = True
+            else:
+                response['result'] = False
+        elif command == 'get':
+            name = request.get('name')
+            device = self.db.select(name)
+            response['device'] = device
+        elif command == 'add':
+            name = request.get('name')
+            owner = request.get('owner')
+            key = request.get('key')
+            result = self.db.insert(name, owner, key)
+            response['id'] = result
 
         if response:
             self.publish(

@@ -2,6 +2,7 @@
 
 import time
 import socket
+import ssl
 import json
 import sys
 import threading
@@ -30,14 +31,18 @@ if len(sys.argv) != 3:
     print("usage:", sys.argv[0], "<host_addres>", "<host_port>")
     sys.exit(1)
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+context = ssl.create_default_context()
+context.load_verify_locations(cafile='cert.pem')
+
+with context.wrap_socket(socket.socket(socket.AF_INET, socket.SOCK_STREAM),
+    server_hostname='Aleksa') as sock:
     sock.connect_ex((sys.argv[1], int(sys.argv[2])))
 
     thread = threading.Thread(target=reading, args=(sock,), daemon=True)
     thread.start()
 
     while True:
-        command = input(">>>> ")
+        command = input(">> enter command >> ")
 
         if command == 'exit':
             break

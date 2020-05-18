@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+	<div class="container">
+		<div class="jumbotron">
+			<div class='row'>
+				<div class='col'>
+					<p>Device Name:</p>
+					<p>{{ device['name'] }}</p>
+				</div>
+			</div>
+			<div class='row'>
+				<div class='col'>
+					<dl>
+						<form action="{{ url_for('new_policy', device_name=device['name']) }}" method="post">
+							<dt>Enter User Email</dt>
+							<dd>
+								<input type="text" class="form-control" name="user">
+							</dd>
+							<dt>Subscribe Rights</dt>
+							<dd>
+								<input type="checkbox" class="form-check-input" name="read">
+							</dd>
+							<dt>Publish Rights</dt>
+							<dd>
+								<input type="checkbox" class="form-check-input" name="write">
+							</dd>
+							<dt><button type="submit" class="btn btn-primary">Submit</button>
+  							</dt><dd></dd>
+						</form>
+					</dl>
+				</div>
+			</div>
+			{% if error_name %}
+			<div class='row'>
+				<div class='col'>
+					<p>Policy already exists</p>
+				</div>
+			</div>
+			{% endif %}
+		</div>
+	</div>
+{% endblock %}

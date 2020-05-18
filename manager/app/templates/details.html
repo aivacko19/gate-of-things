@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+	<div class="container">
+		<div class="jumbotron">
+			<div class='row'>
+				<div class='col'>
+					<dl>
+						<dt>Device Name</dt>
+						<dd>{{ device['name'] }}</dd>
+						<dt>Public Key</dt>
+						<dd>{{ device['key'] }}</dd>
+					</dl>
+				</div>
+				<div class='col'>
+					<div class='row'>
+						<div class='col'>
+							<a href="{{ url_for('change_key', device_name=device['name']) }}" 
+								class="btn btn-primary" role='button'>Change Key</a>
+						</div>
+					</div>
+					<div class='row'>
+						<div class='col'>
+							<a href="{{ url_for('delete_device', device_name=device['name']) }}" 
+								class="btn btn-primary" role='button'>Delete Device</a>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class='row'>
+				<div class='col'>
+					<a href="{{ url_for('policies', device_name=device['name']) }}" 
+						class="btn btn-primary" role='button'>Policies</a>
+				</div>
+				<div class='col'>
+					<a href="{{ url_for('subscriptions', device_name=device['name']) }}" 
+						class="btn btn-primary" role='button'>Subscriptions</a>
+				</div>
+				<div class='col'>
+					<a href="{{ url_for('log', device_name=device['name']) }}" 
+						class="btn btn-primary" role='button'>Log</a>
+				</div>
+			</div>
+		</div>
+	</div>
+{% endblock %}

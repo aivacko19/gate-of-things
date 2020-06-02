@@ -3,27 +3,33 @@
 import os
 import logging
 
-from oauth_uri_service import OAuthUriService
-from oauth_userinfo_service import app as userinfo_service
+from service import Service
+from callback import app 
 
 LOGGER = logging.getLogger(__name__)
 LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %(message)s')
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
-env = {
-    'OAUTH_URI_SERVICE': None,
-    'REDIRECT_URI': None
-}
+key = 'QUEUE'
+queue = os.environ.get(key, None)
+if not queue:
+    raise Exception('Environment variable %s not defined', key)
 
-for key in env:
-    service = os.environ.get(key)
-    if not service:
-        raise Exception('Environment variable %s not defined', key)
-    env[key] = service
+key = 'REDIRECT_URI'
+redirect_uri = os.environ.get(key, None)
+if not redirect_uri:
+    raise Exception('Environment variable %s not defined', key)
 
-HOST = os.environ.get("HOST", "localhost")
+key = 'HOST'
+host = os.environ.get(key, 'localhost')
 
-uri_service = OAuthUriService(env['OAUTH_URI_SERVICE'], env['REDIRECT_URI'])
-uri_service.start()
-userinfo_service.run(host=HOST, ssl_context=('cert.pem', 'key.pem'))
-uri_server.close()
+service = Service(queue, redirect_uri)
+service.start()
+app.run(host=host, ssl_context=('cert.pem', 'key.pem'))
+
+try:
+    service.join()
+except KeyboardInterrupt:
+    LOGGER.error('Caught Keyboard Interrupt, exiting...')
+    service.close()
+    service.join()

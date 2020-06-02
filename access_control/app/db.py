@@ -59,27 +59,10 @@ DELETE_RESOURCE = """
     WHERE resource = %s
 """
 
-class PolicyDB:
+class Database:
 
-    __instance = None
-
-    @staticmethod
-    def getInstance():
-        if not PolicyDB.__instance:
-            DB_NAME = os.environ.get('DB_NAME', 'mydb')
-            DB_USER = os.environ.get('DB_USER', 'root')
-            DB_PASS = os.environ.get('DB_PASS', 'root')
-            DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
-            SessionDB.__instance = SessionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
-
-        return PolicyDB.__instance
-
-    def __init__(self, db_name, db_user, db_password, db_host):
-        self.connection = psycopg2.connect(
-            database=db_name,
-            user=db_user,
-            password=db_password,
-            host=db_host,)
+    def __init__(self, dsn):
+        self.connection = psycopg2.connect(dsn)
         self.connection.autocommit = True
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)

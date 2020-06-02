@@ -11,7 +11,7 @@
 			</div>
 			<div class='row'>
 				<div class='col'>
-					<table class='table'>
+					<table class='table table-sm'>
 						<thead>
 							<tr>
 								<th scope='col'>User</th>
@@ -22,9 +22,9 @@
 						<tbody>
 							{% for log in logs %}
 							<tr>
+								<td>{{ log['access_time'] }}</td>
 								<td>{{ log['user'] }}</td>
 								<td>{{ log['action'] }}</td>
-								<td>{{ log['access_time'] }}</td>
 							</tr>
 							{% endfor %}
 						</tbody>

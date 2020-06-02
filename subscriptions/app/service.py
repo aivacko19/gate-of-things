@@ -28,6 +28,7 @@ DEVICE_PREFIX = 'device/'
 env = {
     'MESSAGE_SERVICE': None,
     'ACCESS_CONTROL_SERVICE': None,
+    'DEVICE_SERVICE': None,
     'LOGGER_SERVICE': None
 }
 
@@ -37,7 +38,7 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = service
 
-class SubscriptionService(amqp_helper.AmqpAgent):
+class Service(amqp_helper.AmqpAgent):
 
     def __init__(self, queue, db):
         self.db = db
@@ -248,11 +249,17 @@ class SubscriptionService(amqp_helper.AmqpAgent):
         if not resource.startswith(DEVICE_PREFIX):
             return
 
+        device = self.rpc(
+            obj={'command': 'get', 'name': resource.split('/')[1]},
+            queue=env['DEVICE_SERVICE']).get('device')
+        owner = device.get('owner')
+
         response = {
             'command': 'log',
             'user': email,
             'resource': resource,
-            'action': action,}
+            'action': action,
+            'owner': owner,}
 
         self.publish(
             obj=response,

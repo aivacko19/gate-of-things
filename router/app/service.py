@@ -4,7 +4,6 @@ import logging
 import time
 
 import amqp_helper
-from db import ConnectionDB
 
 SUCCESS = 0X00
 CONTINUE_AUTHENTICATION = 0x18
@@ -20,7 +19,7 @@ PAYLOAD_FORMAT_INVALID = 0X99
 LOGGER = logging.getLogger(__name__)
 
 env = {
-    'ROUTING_SERVICE': None,
+    'QUEUE': None,
     'OAUTH_URI_SERVICE': None,
     'SUBSCRIPTION_SERVICE': None,
     'MESSAGE_SERVICE': None,
@@ -33,7 +32,7 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = service
 
-class RoutingService(amqp_helper.AmqpAgent):
+class Service(amqp_helper.AmqpAgent):
 
     def __init__(self, queue, db):
         self.db = db
@@ -188,7 +187,9 @@ class RoutingService(amqp_helper.AmqpAgent):
                     cid = self.db.add(conn)
                     self.redirect(request, conn, 'MESSAGE_SERVICE')
                     if method == 'OAuth2.0':
-                        self.redirect({'oauth_request': True}, conn, 'OAUTH_URI_SERVICE')
+                        self.redirect({
+                            'oauth_request': True, 
+                            'queue': env['QUEUE']}, conn, 'OAUTH_URI_SERVICE')
                     elif method == 'SignatureValidation':
                         request['command'] = 'authenticate'
                         self.redirect(request, conn, 'DEVICE_SERVICE')
@@ -251,7 +252,7 @@ class RoutingService(amqp_helper.AmqpAgent):
                     if method == 'OAuth2.0':
                         self.redirect({
                             'oauth_request': True,
-                            'queue': env['ROUTING_SERVICE']}, conn, 'OAUTH_URI_SERVICE')
+                            'queue': env['QUEUE']}, conn, 'OAUTH_URI_SERVICE')
                     elif method == 'SignatureValidation':
                         request['command'] = 'authenticate'
                         self.redirect(request, conn, 'DEVICE_SERVICE')

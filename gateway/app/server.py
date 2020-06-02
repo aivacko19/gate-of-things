@@ -13,11 +13,12 @@ class Server:
         self.host = host
         self.stop_flag = False
         self.listener = None
+        self.listener_safe = None
         self.selector = None
 
-    def register_listener(self):
-        self.listener.setblocking(False)
-        self.selector.register(self.listener, selectors.EVENT_READ, data=None)
+    def register_listener(self, listener):
+        listener.setblocking(False)
+        self.selector.register(listener, selectors.EVENT_READ, data=None)
 
     def register_client(self, socket, data, mask):
         try:
@@ -55,11 +56,16 @@ class Server:
         if self.selector is not None:
             if self.listener is not None:
                 self.unregister(self.listener)
+            if self.listener_safe is not None:
+                self.unregister(self.listener_safe)
             self.selector.close()
             self.selector = None
         if self.listener is not None:
             self.listener.close()
             self.listener = None
+        if self.listener_safe is not None:
+            self.listener_safe.close()
+            self.listener_safe = None
 
     def get_empty_buffer(self):
         pass
@@ -98,12 +104,22 @@ class Server:
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         context.load_cert_chain(certfile='cert.pem', keyfile='key.pem')
 
-        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.listener.bind((self.host, self.protocol.port))
-        self.listener.listen()
-        self.selector = selectors.DefaultSelector()
-        self.register_listener()
+        selector = selectors.DefaultSelector()
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((self.host, self.protocol.port))
+        listener.listen()
+        self.register_listener(listener)
+        self.listener = listener
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((self.host, self.protocol.port_safe))
+        listener.listen()
+        self.register_listener(listener)
+        self.listener_safe = listener
+
         self.on_start()
 
         try:
@@ -112,8 +128,12 @@ class Server:
                 for key, mask in events:
 
                     if key.data is None:
-                        sock, addr = self.listener.accept()
-                        client = context.wrap_socket(sock, server_side=True)
+                        listener = key.fileobj
+                        safe = listener.getsockname()[1] == 8887
+                        sock, addr = listener.accept()
+                        client = sock
+                        if safe:
+                            client = context.wrap_socket(sock, server_side=True)
                         LOGGER.info('Client %s - connecting', client.fileno())
                         buff = self.get_empty_buffer()
                         self.register_client(client, buff, selectors.EVENT_READ)

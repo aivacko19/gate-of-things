@@ -14,16 +14,6 @@ app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 my_agent = amqp_helper.AmqpAgent()
 my_agent.connect()
 
-env = {
-    'ROUTING_SERVICE': None
-}
-
-for key in env:
-    service = os.environ.get(key)
-    if not service:
-        raise Exception('Environment variable %s not defined', key)
-    env[key] = service
-
 @app.route("/")
 def index():
 

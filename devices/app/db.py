@@ -47,14 +47,10 @@ DELETE = """
     WHERE name = %s
 """
 
-class DeviceDB:
+class Database:
 
-    def __init__(self, db_name, db_user, db_password, db_host):
-        self.connection = psycopg2.connect(
-            database=db_name,
-            user=db_user,
-            password=db_password,
-            host=db_host,)
+    def __init__(self, dsn):
+        self.connection = psycopg2.connect(dsn)
         self.connection.autocommit = True
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)

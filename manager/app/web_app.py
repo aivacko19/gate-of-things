@@ -8,26 +8,29 @@ import requests
 from flask_bootstrap import Bootstrap
 import base64
 
-import service
-import db
+import psycopg2
 
+import service
+from db import Database
 
 import amqp_helper
 from providers import google as provider
 
 LOGGER = logging.getLogger(__name__)
 
+PAGE_SIZE = 30
+
 app = Flask(__name__)
 Bootstrap(app)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 
 env = {
-    'MANAGER_SERVICE': None,
+    'QUEUE': None,
     'OAUTH_URI_SERVICE': None,
     'DEVICE_SERVICE': None,
     'ACCESS_CONTROL_SERVICE': None,
     'SUBSCRIPTION_SERVICE': None,
-    'LOGGER_SERVICE': None
+    'AUDITOR_SERVICE': None
 }
 
 for key in env:
@@ -36,7 +39,19 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = env_var
 
-var = {}
+key = 'DSN'
+dsn = os.environ.get(key, None)
+if not dsn:
+    raise Exception('Environment variable %s not defined', key)
+
+db = Database(dsn)
+
+key = 'AUDIT_LOG_DB'
+audit_log_db = os.environ.get(key, None)
+if not audit_log_db:
+    raise Exception('Environment variable %s not defined', key)
+
+
 my_agent = amqp_helper.AmqpAgent()
 my_agent.connect()
 
@@ -45,15 +60,15 @@ def index():
     failed_to_login = False
     if 'username' not in session:
         if 'temp_id' not in session:
-            temp_id = var['mydb'].new()
+            temp_id = db.new()
             session['temp_id'] = temp_id
         else:
-            result = var['mydb'].get(session['temp_id'])
+            result = db.get(session['temp_id'])
             username = result.get('username')
             failed_to_login = result.get('failed')
             if username:
                 session['username'] = username
-                var['mydb'].delete(session['temp_id'])
+                db.delete(session['temp_id'])
                 del session['temp_id']
 
     if 'username' not in session:
@@ -79,7 +94,7 @@ def login():
     my_request = {
         'oauth_request': True,
         'redirect_url': request.url_root,
-        'queue': env['MANAGER_SERVICE'],}
+        'queue': env['QUEUE'],}
     response = my_agent.rpc(
         obj=my_request,
         queue=env['OAUTH_URI_SERVICE'],
@@ -90,11 +105,11 @@ def login():
 @app.route("/logout/")
 def logout():
     session.pop('username', None)
+    session.pop('devices', None)
     return redirect(url_for('index'))
 
 @app.route("/<device_name>/")
 def details(device_name):
-    LOGGER.info(session['devices'])
     device = get_device(device_name)
     if device is None:
         return redirect(url_for('index'))
@@ -309,7 +324,7 @@ def subscriptions(device_name):
 
     return render_template('subscriptions.html', device=device, subscriptions=subscriptions)
 
-@app.route('/device/<device_name>/subscriptions/<user>/delete_subscription/')
+@app.route('/<device_name>/subscriptions/<user>/delete_subscription/')
 def delete_subscription(device_name, user):
     device = get_device(device_name)
     if device is None:
@@ -326,20 +341,36 @@ def delete_subscription(device_name, user):
 
     return redirect(url_for('subscriptions', device_name=device_name))
 
-@app.route('/device/<device_name>/log/')
+@app.route('/<device_name>/log')
 def log(device_name):
     device = get_device(device_name)
     if device is None:
         return redirect(url_for('index'))
 
-    resource = 'device/%s' % device_name
+    page = int(request.args.get('page', '1'))
 
-    my_request = {
-        'command': 'get_logs',
-        'resource': resource,
-    }
-    response = rpc(my_request, "LOGGER_SERVICE")
-    logs = response['logs']
+    limit = PAGE_SIZE
+    offset = (page - 1) * PAGE_SIZE
+
+    resource = 'device/%s' % device_name
+    user = session['username'].replace('@', '_at_').replace('.', '_dot_')
+    dsn = 'postgres://%s:123@%s' % (user, audit_log_db)
+    query = 'SELECT * FROM get_audit_logs(%s, %s, %s)'
+
+    logs = list()
+    with psycopg2.connect(dsn) as conn:
+        conn.autocommit = True
+        cursor = conn.cursor()
+        cursor.execute(query, (resource, limit, offset))
+        result = cursor.fetchall()
+        LOGGER.info(result)
+        for row in result:
+            log = {
+                'user': row[0],
+                'action': row[1],
+                'access_time': row[2]
+            }
+            logs.append(log)
 
     return render_template('log.html', device=device, logs=logs)
 

@@ -88,7 +88,6 @@ class AmqpAgent(threading.Thread):
                                                               inactivity_timeout=10):
             
             if not (method or properties or body): 
-                LOGGER.info('Listening...')
                 if self._closing: 
                     self._channel.cancel()
                     break
@@ -177,6 +176,8 @@ class AmqpAgent(threading.Thread):
 
         obj_str = body.decode('utf-8')
         obj = json.loads(obj_str, object_hook=as_bytes)
+
+        LOGGER.info('Received message: %s', obj_str)
 
         return obj
 

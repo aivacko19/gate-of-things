@@ -9,46 +9,89 @@ ID_INDEX = 0
 USER_INDEX = 1
 RESOURCE_INDEX = 2
 ACTION_INDEX = 3
-ACCESS_TIME_INDEX = 4
+OWNER_INDEX = 4
+ACCESS_TIME_INDEX = 5
 
 CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS log (
+    CREATE TABLE IF NOT EXISTS audit_log (
         id SERIAL PRIMARY KEY,
         client VARCHAR(40),
         resource VARCHAR(40),
         action VARCHAR(40),
+        owner VARCHAR(40),
         access_time TIMESTAMP
     );
+    CREATE OR REPLACE FUNCTION get_audit_logs (m_resource varchar(40), m_limit integer, m_offset integer) 
+        RETURNS TABLE (
+            m_client VARCHAR(40),
+            m_action VARCHAR(40),
+            m_access_time TIMESTAMP
+    ) 
+    AS $$
+    BEGIN
+        RETURN QUERY SELECT
+            client,
+            action,
+            access_time
+        FROM
+            audit_log
+        WHERE
+            resource = m_resource
+        AND 
+            user = owner
+        ORDER BY access_time DESC
+        LIMIT m_limit
+        OFFSET m_offset;
+    END; $$ 
+
+    LANGUAGE 'plpgsql';
 """
 
-insert_keys = ['client', 'resource', 'action']
+insert_keys = ['client', 'resource', 'action', 'owner']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
-    INSERT INTO log ({", ".join(insert_keys)}, access_time)
+    INSERT INTO audit_log ({", ".join(insert_keys)}, access_time)
     VALUES ({insert_values}, CURRENT_TIMESTAMP)
     RETURNING id
 """
 
 SELECT = """
-    SELECT * FROM log
+    SELECT * FROM audit_log
     WHERE resource = %s
 """
 
-class DB:
+SELECT_OWNER = """
+    SELECT * FROM audit_log
+    WHERE owner = %s
+"""
 
-    def __init__(self, db_name, db_user, db_password, db_host):
-        self.connection = psycopg2.connect(
-            database=db_name,
-            user=db_user,
-            password=db_password,
-            host=db_host,)
+CREATE_USER = """
+    CREATE USER %s WITH PASSWORD '123';
+"""
+
+GRANT_EXECUTE = """
+    GRANT EXECUTE ON FUNCTION get_audit_logs TO %s;
+"""
+
+GRANT_SELECT = """
+    GRANT SELECT ON audit_log TO %s;
+"""
+
+class Database:
+
+    def __init__(self, dsn):
+        self.connection = psycopg2.connect(dsn)
         self.connection.autocommit = True
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)
 
-    def insert(self, user, resource, action):
+    def insert(self, user, resource, action, owner):
+        owner = owner.replace('@', '_at_').replace('.', '_dot_')
+        # cursor = self.connection.cursor()
+        # cursor.execute(SELECT_OWNER, (owner,))
+        # LOGGER.info(cursor.fetchall())
         cursor = self.connection.cursor()
-        cursor.execute(INSERT, (user, resource, action,))
+        cursor.execute(INSERT, (user, resource, action, owner,))
         result = cursor.fetchone()
         if result is None:
             return None
@@ -70,9 +113,19 @@ class DB:
                 'user': row[USER_INDEX],
                 'resource': row[RESOURCE_INDEX],
                 'action': row[ACTION_INDEX],
+                'owner': row[OWNER_INDEX],
                 'access_time': str(row[ACCESS_TIME_INDEX]),
             }
 
             logs.append(log)
 
         return logs
+
+    def grant(self, owner):
+        owner = owner.replace('@', '_at_').replace('.', '_dot_')
+        cursor = self.connection.cursor()
+        cursor.execute(CREATE_USER % owner)
+        cursor = self.connection.cursor()
+        cursor.execute(GRANT_SELECT % owner)
+        cursor = self.connection.cursor()
+        cursor.execute(GRANT_EXECUTE % owner)

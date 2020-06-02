@@ -43,11 +43,14 @@ def reading(server_socket, ac):
         print(packet)
 
 
-DEVICE_NAME = 'my-device'
+DEVICE_NAME = 'my-device2'
+# 'my-device'
 URI = '192.168.99.100'
 TOKEN_FORMAT = "SharedAccessSignature sig=%s&se=%s&skn=%s&sr=%s"
-PRIVATE_KEY = "dtcMIuk6BBAu1oI7heg26kvoiLoSMVYGoRGrrOVq09HGIkgOERc9sbJ9I7Wf8dhzskn5MDbFizPb+0lm6WN5Nw=="
-PUBLIC_KEY = "xiJIDhEXPbGyfSO1n/HYc7JJ+TA2xYsz2/tJZuljeTc="
+PRIVATE_KEY = "zLG/jobeHdtCn/I3B7uVUh1XJ+eMX6Epm6UbikhV2gIcT3aeRdNk2GQQzUN77ZUDhuIJyQry5r994JMXH5URVA=="
+# "F50kLUEGdT0rhr9g7RipKkMM1A1LYrjb9ZebYp4izpmEUF5M1jfHA3u2JrE/kodYLkgLqAXSfcCi+UE5baSygQ=="
+PUBLIC_KEY = "HE92nkXTZNhkEM1De+2VA4biCckK8ua/feCTFx+VEVQ="
+# "hFBeTNY3xwN7tiaxP5KHWC5IC6gF0n3AovlBOW2ksoE="
 
 if len(sys.argv) != 3:
     print("usage:", sys.argv[0], "<host_addres>", "<host_port>")

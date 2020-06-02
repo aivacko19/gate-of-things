@@ -6,16 +6,7 @@ import amqp_helper
 
 LOGGER = logging.getLogger(__name__)
 
-env = {
-}
-
-for key in env:
-    service = os.environ.get(key)
-    if not service:
-        raise Exception('Environment variable %s not defined', key)
-    env[key] = service
-
-class AccessControlService(amqp_helper.AmqpAgent):
+class Service(amqp_helper.AmqpAgent):
 
     def __init__(self, queue, db):
         self.db = db
@@ -24,6 +15,7 @@ class AccessControlService(amqp_helper.AmqpAgent):
     def main(self, request, props):
 
         command = request.get('command')
+        del request['command']
         response = {}
 
         if command == 'add_policy':

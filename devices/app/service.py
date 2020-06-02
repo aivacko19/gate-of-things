@@ -34,7 +34,8 @@ SHARED_ACCESS_SIGNATURE = 'SharedAccessSignature'
 TOKEN_FIELDS = ['sig', 'se', 'skn', 'sr']
 
 env = {
-    'ACCESS_CONTROL_SERVICE': None
+    'ACCESS_CONTROL_SERVICE': None,
+    'LOGGER_SERVICE': None
 }
 
 for key in env:
@@ -68,7 +69,7 @@ def parse_token(token_string):
 
     return rawtoken
 
-class DeviceService(amqp_helper.AmqpAgent):
+class Service(amqp_helper.AmqpAgent):
 
     def __init__(self, queue, db):
         self.db = db
@@ -103,10 +104,44 @@ class DeviceService(amqp_helper.AmqpAgent):
             device = self.db.select(name)
             response['device'] = device
         elif command == 'add':
+
             name = request.get('name')
             owner = request.get('owner')
             key = request.get('key')
+
             result = self.db.insert(name, owner, key)
+            self.publish(
+                obj={'command': 'grant', 'owner': owner},
+                queue=env['LOGGER_SERVICE'])
+
+            email = '%s@device' % name
+            resource = 'device/%s' % name
+            resource_ctrl = '%s/ctrl' % resource
+
+            # Enable device to publish
+            response = {
+                'user': email,
+                'resource': resource,
+                'write': True,
+            }
+            self.create_policy(response, props)
+
+            # Enable device to be controled
+            response = {
+                'user': email,
+                'resource': resource_ctrl,
+                'read': True,
+            }
+            self.create_policy(response, props)
+
+            # Enable owner to control
+            response = {
+                'user': owner,
+                'resource': resource_ctrl,
+                'write': True
+            }
+            self.create_policy(response, props)
+
             response['id'] = result
 
         if response:
@@ -164,33 +199,6 @@ class DeviceService(amqp_helper.AmqpAgent):
             return None
 
         email = '%s@device' % device_id
-        resource = 'device/%s' % device_id
-        resource_ctrl = '%s/ctrl' % resource
-        owner = device.get('owner')
-
-        # Enable device to publish
-        response = {
-            'user': email,
-            'resource': resource,
-            'write': True,
-        }
-        self.create_policy(response, props)
-
-        # Enable device to be controled
-        response = {
-            'user': email,
-            'resource': resource_ctrl,
-            'read': True,
-        }
-        self.create_policy(response, props)
-
-        # Enable owner to control
-        response = {
-            'user': owner,
-            'resource': resource_ctrl,
-            'write': True
-        }
-        self.create_policy(response, props)
 
         return email
 

@@ -18,15 +18,12 @@ services:
       - ./router:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      ROUTING_SERVICE: routing-service
+      QUEUE: routing-service
+      DSN: postgresql://root:root@conn_db/mydb
       OAUTH_URI_SERVICE: oauth-service
       SUBSCRIPTION_SERVICE: subscription-service
       MESSAGE_SERVICE: message-service
       DEVICE_SERVICE: device-service
-      DB_NAME: mydb
-      DB_USER: root
-      DB_PASS: root
-      DB_HOST: conn_db
     depends_on:
       - "rabbitmq"
       - "conn_db"
@@ -38,8 +35,7 @@ services:
       - ./oauth:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      OAUTH_URI_SERVICE: oauth-service
-      ROUTING_SERVICE: routing-service
+      QUEUE: oauth-service
       REDIRECT_URI: "https://127.0.0.1:55000/"
     depends_on:
       - "rabbitmq"
@@ -49,14 +45,12 @@ services:
       - ./subscriptions:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      SUBSCRIPTION_SERVICE: subscription-service
+      QUEUE: subscription-service
+      DSN: postgresql://root:root@conn_db/mydb
       MESSAGE_SERVICE: message-service
       ACCESS_CONTROL_SERVICE: access-control-service
+      DEVICE_SERVICE: device-service
       LOGGER_SERVICE: logger-service
-      DB_NAME: mydb
-      DB_USER: root
-      DB_PASS: root
-      DB_HOST: conn_db
     depends_on:
       - "rabbitmq"
       - "conn_db"
@@ -66,12 +60,9 @@ services:
       - ./messages:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      MESSAGE_SERVICE: message-service
+      QUEUE: message-service
+      DSN: postgresql://root:root@conn_db/mydb
       ROUTING_SERVICE: routing-service
-      DB_NAME: mydb
-      DB_USER: root
-      DB_PASS: root
-      DB_HOST: conn_db
     depends_on:
       - "rabbitmq"
       - "conn_db"
@@ -81,11 +72,8 @@ services:
       - ./access_control:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      ACCESS_CONTROL_SERVICE: access-control-service
-      DB_NAME: mydb
-      DB_USER: root
-      DB_PASS: root
-      DB_HOST: conn_db
+      QUEUE: access-control-service
+      DSN: postgresql://root:root@conn_db/mydb
     depends_on:
       - "rabbitmq"
       - "conn_db"
@@ -95,12 +83,10 @@ services:
       - ./devices:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      DEVICE_SERVICE: device-service
+      QUEUE: device-service
+      DSN: postgresql://root:root@conn_db/mydb
       ACCESS_CONTROL_SERVICE: access-control-service
-      DB_NAME: mydb
-      DB_USER: root
-      DB_PASS: root
-      DB_HOST: conn_db
+      LOGGER_SERVICE: logger-service
     depends_on:
       - "rabbitmq"
       - "conn_db"
@@ -110,15 +96,11 @@ services:
       - ./logger:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      MY_SERVICE: logger-service
-      ACCESS_CONTROL_SERVICE: access-control-service
-      DB_NAME: mydb
-      DB_USER: root
-      DB_PASS: root
-      DB_HOST: conn_db
+      QUEUE: logger-service
+      DSN: postgresql://root:root@log_db/mydb
     depends_on:
       - "rabbitmq"
-      - "conn_db"
+      - "log_db"
   rabbitmq:
     image: rabbitmq:3.8-alpine
     ports:
@@ -133,6 +115,14 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
       POSTGRES_DB: mydb
+  log_db:
+    image: postgres:10-alpine
+    volumes:
+      - log-db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: mydb
   manager:
     build: ./manager
     ports:
@@ -141,20 +131,20 @@ services:
       - ./manager:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
-      MANAGER_SERVICE: manager-service
+      QUEUE: manager-service
+      DSN: postgresql://root:root@conn_db/mydb
       OAUTH_URI_SERVICE: oauth-service
       DEVICE_SERVICE: device-service
       ACCESS_CONTROL_SERVICE: access-control-service
       SUBSCRIPTION_SERVICE: subscription-service
-      LOGGER_SERVICE: logger-service
-      DB_NAME: mydb
-      DB_USER: root
-      DB_PASS: root
-      DB_HOST: conn_db
+      AUDITOR_SERVICE: auditor-service
+      AUDIT_LOG_DB: log_db/mydb
     depends_on:
       - "rabbitmq"
       - "conn_db"
+      - "log_db"
 
 volumes:
   conn-db-data:
+  log-db-data:
 

@@ -33,16 +33,6 @@ DEVICE_PREFIX = 'device/'
 SHARED_ACCESS_SIGNATURE = 'SharedAccessSignature'
 TOKEN_FIELDS = ['sig', 'se', 'skn', 'sr']
 
-env = {
-    'ACCESS_CONTROL_SERVICE': None
-}
-
-for key in env:
-    service = os.environ.get(key)
-    if not service:
-        raise Exception('Environment variable %s not defined', key)
-    env[key] = service
-
 class Service(amqp_helper.AmqpAgent):
 
     def __init__(self, queue, db):
@@ -50,26 +40,33 @@ class Service(amqp_helper.AmqpAgent):
         amqp_helper.AmqpAgent.__init__(self, queue)
 
     def main(self, request, props):
+
         command = request.get('command')
         del request['command']
-        response = {}
 
         if command == 'log':
+
+            if ('user' not in request
+                or 'resource' not in request
+                or 'action' not in request
+                or 'owner' not in request):
+                return
+
             user = request.get('user')
             resource = request.get('resource')
             action = request.get('action')
-            self.db.insert(user, resource, action)
-        elif command == 'get_logs':
-            resource = request.get('resource')
-            logs = self.db.select(resource)
-            response['logs'] = logs
+            owner = request.get('owner')
 
-        
-        if response:
-            self.publish(
-                obj=response,
-                queue=props.reply_to,
-                correlation_id=props.correlation_id)
+            self.db.insert(user, resource, action, owner)
+
+        elif command == 'grant':
+
+            if ('owner' not in request):
+                return
+
+            owner = request.get('owner')
+            
+            self.db.grant(owner)
 
 
 

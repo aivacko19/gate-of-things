@@ -5,7 +5,7 @@ import json
 
 CONTINUE_AUTHENTICATION = 0x18
 
-class OAuthUriService(amqp_helper.AmqpAgent):
+class Service(amqp_helper.AmqpAgent):
 
     def __init__(self, queue, redirect_uri):
         self.redirect_uri = redirect_uri

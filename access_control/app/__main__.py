@@ -3,35 +3,30 @@
 import os
 import logging
 
-import db
-import service
+from db import Database
+from service import Service
 
 LOGGER = logging.getLogger(__name__)
 LOG_FORMAT = ('%(levelname) -10s %(asctime)s %(name)s %(funcName)s %(lineno)d: %(message)s')
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
-env = {
-    'ACCESS_CONTROL_SERVICE': None
-}
+key = 'QUEUE'
+queue = os.environ.get(key, None)
+if not queue:
+    raise Exception('Environment variable %s not defined', key)
 
-for key in env:
-    myservice = os.environ.get(key)
-    if not myservice:
-        raise Exception('Environment variable %s not defined', key)
-    env[key] = myservice
+key = 'DSN'
+dsn = os.environ.get(key, None)
+if not dsn:
+    raise Exception('Environment variable %s not defined', key)
 
-DB_NAME = os.environ.get('DB_NAME', 'mydb')
-DB_USER = os.environ.get('DB_USER', 'root')
-DB_PASS = os.environ.get('DB_PASS', 'root')
-DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
-mydb = db.PolicyDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
-
-service_agent = service.AccessControlService(env['ACCESS_CONTROL_SERVICE'], mydb)
-service_agent.start()
+db = Database(dsn)
+service = Service(queue, db)
+service.start()
 
 try:
-    service_agent.join()
+    service.join()
 except KeyboardInterrupt:
     LOGGER.error('Caught Keyboard Interrupt, exiting...')
-    service_agent.close()
-    service_agent.join()
+    service.close()
+    service.join()

@@ -26,7 +26,7 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = service
 
-class MessageService(amqp_helper.AmqpAgent):
+class Service(amqp_helper.AmqpAgent):
 
     def __init__(self, queue, db):
         self.db = db

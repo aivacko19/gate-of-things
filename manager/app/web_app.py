@@ -30,7 +30,6 @@ env = {
     'DEVICE_SERVICE': None,
     'ACCESS_CONTROL_SERVICE': None,
     'SUBSCRIPTION_SERVICE': None,
-    'AUDITOR_SERVICE': None
 }
 
 for key in env:
@@ -57,12 +56,15 @@ my_agent.connect()
 
 @app.route("/")
 def index():
+    # Attempt to fetch username
     failed_to_login = False
     if 'username' not in session:
         if 'temp_id' not in session:
+            # Create temporary id for guest
             temp_id = db.new()
             session['temp_id'] = temp_id
         else:
+            # Check if OAuth service verified the user
             result = db.get(session['temp_id'])
             username = result.get('username')
             failed_to_login = result.get('failed')
@@ -75,15 +77,21 @@ def index():
         return render_template('login.html', failed=failed_to_login)
 
     if 'devices' not in session:
+        # Get names of devices owned
         my_request = {
-            'command': 'get_devices',
-            'owner': session['username']
+            'command': 'get_owned_resources',
+            'user': session['username'],}
+        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+
+        # Get device properties 
+        my_request = {
+            'command': 'get_devices_by_name',
+            'names': session['resources']
         }
         response = rpc(my_request, 'DEVICE_SERVICE')
         session['devices'] = response['devices']
 
     devices = session['devices']
-
     return render_template('devices.html', devices=devices)
 
 @app.route("/login/")
@@ -92,7 +100,7 @@ def login():
         return redirect(url_for('index'))
 
     my_request = {
-        'oauth_request': True,
+        'command': 'oauth_request',
         'redirect_url': request.url_root,
         'queue': env['QUEUE'],}
     response = my_agent.rpc(
@@ -208,6 +216,36 @@ def new_device():
     }
 
     session['devices'][name] = device
+
+    email = '%s@device' % name
+    resource = 'device/%s' % name
+    resource_ctrl = '%s/ctrl' % resource
+
+    # Enable device to publish
+    response = {
+        'user': email,
+        'resource': resource,
+        'write': True,
+    }
+    self.create_policy(response, props)
+
+    # Enable device to be controled
+    response = {
+        'user': email,
+        'resource': resource_ctrl,
+        'read': True,
+    }
+    self.create_policy(response, props)
+
+    # Enable owner to control
+    response = {
+        'user': owner,
+        'resource': resource_ctrl,
+        'write': True,
+        'owner': True
+    }
+    self.create_policy(response, props)
+
     LOGGER.info(session['devices'])
 
     return render_template('details.html', device=device)
@@ -226,7 +264,28 @@ def policies(device_name):
             'resource': resource
         }
         response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
-        session['devices'][device_name]['policies'] = response.get('policies')
+        policies = response.get('policies')
+        for user, policy in policies.items():
+            if not policy['read']:
+                del policies[user]
+            policy['write'] = False
+        my_request = {
+            'command': 'get_resource',
+            'resource': resource + '/ctrl'
+        }
+        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+        write_policies = response.get('policies')
+        for user, policy in write_policies.items():
+            if not policy['write']:
+                continue
+            if user in policies:
+                policies[user]['write'] = True
+            else:
+                policy['read'] = False
+                policy['access_time'] = 0
+                policies[user] = policy
+
+        session['devices'][device_name]['policies'] = policies
 
     policies = session['devices'][device_name]['policies']
 
@@ -251,14 +310,30 @@ def delete_policy(device_name, user):
     policies = session['devices'][device_name]['policies']
 
     if user in policies:
+        policy = session['devices'][device_name]['policies'][user]
+        read = policy['read']
+        write = policy['write']
+        own = policy['own']
+        if own:
+            return
+
         del session['devices'][device_name]['policies'][user]
 
-        my_request = {
-            'command': 'delete_policy',
-            'resource': resource,
-            'user': user
-        }
-        publish(my_request, 'ACCESS_CONTROL_SERVICE')
+        if read:
+            my_request = {
+                'command': 'delete_policy',
+                'resource': resource,
+                'user': user
+            }
+            publish(my_request, 'ACCESS_CONTROL_SERVICE')
+        if write:
+            my_request = {
+                'command': 'delete_policy',
+                'resource': resource + '/ctrl',
+                'user': user
+            }
+            publish(my_request, 'ACCESS_CONTROL_SERVICE')
+
 
     return redirect(url_for('policies', device_name=device_name))
 
@@ -286,23 +361,41 @@ def new_policy(device_name):
     user = request.form.get('user')
     read = 'read' in request.form and request.form.get('read') == 'on'
     write = 'write' in request.form and request.form.get('write') == 'on'
+    own = 'own' in request.form and request.form.get('own') == 'on'
+    access_time = int(request.form.get('access_time'))
 
     if user in policies:
         return render_template('new_policy.html', device=device, error_name=True)
 
-    my_request = {
-        'command': 'add_policy',
-        'resource': resource,
-        'user': user,
-        'read': read,
-        'write': write,
-    }
-    publish(my_request, "ACCESS_CONTROL_SERVICE")
+    if read:
+        my_request = {
+            'command': 'add_policy',
+            'resource': resource,
+            'user': user,
+            'read': read,
+            'write': False,
+            'own': own,
+            'access_time': access_time
+        }
+        publish(my_request, "ACCESS_CONTROL_SERVICE")
+    if write:
+        my_request = {
+            'command': 'add_policy',
+            'resource': resource + '/ctrl',
+            'user': user,
+            'read': False,
+            'write': write,
+            'access_time': 0
+        }
+        publish(my_request, "ACCESS_CONTROL_SERVICE")
+
 
     session['devices'][device_name]['policies'][user] = {
         'user': user,
         'read': read,
         'write': write,
+        'own': own,
+        'access_time': access_time,
     }
 
     return redirect(url_for('policies', device_name=device_name))
@@ -378,8 +471,18 @@ def get_device(device_name):
     if 'username' not in session:
         return None
 
-    devices = session.get('devices')
+    username = session['username']
 
+    # Check own rights
+    my_request = {
+        'command': 'get_own_access',
+        'user': username,
+        'resource': device_name}
+    response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+    if not response['own_access']:
+        return None
+
+    devices = session.get('devices')
     if device_name not in devices:
         return None
 
@@ -395,6 +498,12 @@ def publish(request, service):
         obj=request,
         queue=env[service])
 
+def create_policy(self, request, props):
+    request['command'] = 'add_policy'
+    self.publish(
+        obj=request,
+        queue=env['ACCESS_CONTROL_SERVICE'],
+        correlation_id=props.correlation_id,)
 
 
 

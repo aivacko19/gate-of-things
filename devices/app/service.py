@@ -33,17 +33,6 @@ DEVICE_PREFIX = 'device/'
 SHARED_ACCESS_SIGNATURE = 'SharedAccessSignature'
 TOKEN_FIELDS = ['sig', 'se', 'skn', 'sr']
 
-env = {
-    'ACCESS_CONTROL_SERVICE': None,
-    'LOGGER_SERVICE': None
-}
-
-for key in env:
-    service = os.environ.get(key)
-    if not service:
-        raise Exception('Environment variable %s not defined', key)
-    env[key] = service
-
 def parse_token(token_string):
     LOGGER.info(token_string)
     token = token_string.split()
@@ -74,82 +63,18 @@ class Service(amqp_helper.AmqpAgent):
     def __init__(self, queue, db):
         self.db = db
         amqp_helper.AmqpAgent.__init__(self, queue)
+        self.actions = {
+            'authenticate': self.authenticate,
+            'get_devices': self.get_devices,
+            'get_devices_by_name': self.get_devices_by_name,
+            'delete_device': self.delete_device,
+            'change_key': self.change_key,
+            'disable_device': disable_device,
+            'enable_device': enable_device,
+            'get': get,
+            'add': add,}
 
-    def main(self, request, props):
-        command = request.get('command')
-        del request['command']
-        response = {}
-
-        if command == 'authenticate':
-            response['command'] = 'verify'
-            response['email'] = self.authenticate(request, props)
-        elif command == 'get_devices':
-            owner = request.get('owner')
-            devices = self.db.select_by_owner(owner)
-            response['devices'] = devices
-        elif command == 'delete_device':
-            name = request.get('name')
-            result = self.db.delete(name)
-            response['rowcount'] = result
-        elif command == 'change_key':
-            name = request.get('name')
-            key = request.get('key')
-            result = self.db.update(name, key)
-            if result:
-                response['result'] = True
-            else:
-                response['result'] = False
-        elif command == 'get':
-            name = request.get('name')
-            device = self.db.select(name)
-            response['device'] = device
-        elif command == 'add':
-
-            name = request.get('name')
-            owner = request.get('owner')
-            key = request.get('key')
-
-            result = self.db.insert(name, owner, key)
-            self.publish(
-                obj={'command': 'grant', 'owner': owner},
-                queue=env['LOGGER_SERVICE'])
-
-            email = '%s@device' % name
-            resource = 'device/%s' % name
-            resource_ctrl = '%s/ctrl' % resource
-
-            # Enable device to publish
-            response = {
-                'user': email,
-                'resource': resource,
-                'write': True,
-            }
-            self.create_policy(response, props)
-
-            # Enable device to be controled
-            response = {
-                'user': email,
-                'resource': resource_ctrl,
-                'read': True,
-            }
-            self.create_policy(response, props)
-
-            # Enable owner to control
-            response = {
-                'user': owner,
-                'resource': resource_ctrl,
-                'write': True
-            }
-            self.create_policy(response, props)
-
-            response['id'] = result
-
-        if response:
-            self.publish(
-                obj=response,
-                queue=props.reply_to,
-                correlation_id=props.correlation_id)
-
+    # Authenticate client
     def authenticate(self, request, props):
         device_id = props.correlation_id
         device = self.db.select(device_id)
@@ -200,15 +125,61 @@ class Service(amqp_helper.AmqpAgent):
 
         email = '%s@device' % device_id
 
-        return email
+        return {'command': verify, 'email': email}
 
-    def create_policy(self, request, props):
-        request['command'] = 'add_policy'
-        self.publish(
-            obj=request,
-            queue=env['ACCESS_CONTROL_SERVICE'],
-            correlation_id=props.correlation_id,)
+    # Get a list of devices by owner
+    def get_devices(self, request, props):
+        owner = request.get('owner')
+        devices = self.db.select_by_owner(owner)
+        return {'devices': devices}
 
+    # Get a list of devices by name
+    def get_devices_by_name(self, request, props):
+        names = request.get('names')
+        devices = []
+        for name in names:
+            device = self.db.select(name)
+            devices.append(device)
+        return {'devices': devices}
+
+    # Delete a device
+    def delete_device(self, request, props):
+        name = request.get('name')
+        result = self.db.delete(name)
+        return {'result': result}
+
+    # Change public key for a device
+    def change_key(self, request, props):
+        name = request.get('name')
+        key = request.get('key')
+        result = self.db.update_key(name, key)
+        return {'result': result}
+
+    # Disable device
+    def disable_device(self, request, props):
+        name = request.get('name')
+        result = self.db.update_disabled(name, True)
+        return {'result': result}
+
+    # Enable device
+    def enable_device(self, request, props):
+        name = request.get('name')
+        result = self.db.update_disabled(name, False)
+        return {'result': result}
+
+    # Get device by name
+    def get(self, request, props):
+        name = request.get('name')
+        device = self.db.select(name)
+        return {'device': device}
+
+    # Add a new device to the registry
+    def add(self, request, props):
+        name = request.get('name')
+        owner = request.get('owner')
+        key = request.get('key')
+        result = self.db.insert(name, owner, key)
+        return {'id': result}
 
 
 

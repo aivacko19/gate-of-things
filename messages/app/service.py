@@ -31,26 +31,15 @@ class Service(amqp_helper.AmqpAgent):
     def __init__(self, queue, db):
         self.db = db
         amqp_helper.AmqpAgent.__init__(self, queue)
+        self.actions = {
+            'publish': self._publish,
+            'puback': self.puback,
+            'pubrec': self.pubrec,
+            'pubcomp': self.pubcomp,
+            'connect': self._connect,}
 
-    def main(self, request, props):
-        command = request.get('type')
-        LOGGER.info('Client ID: %s, Action: %s', props.correlation_id, command)
-
-        if command == 'publish':
-            self._publish(request, props)
-        elif command == 'puback':
-            self.puback(request, props)
-        elif command == 'pubrec':
-            self.pubrec(request, props)
-        elif command == 'pubcomp':
-            self.puback(request, props)
-        elif command == 'connect':
-            self._connect(request, props)
-        else:
-            LOGGER.error('Unknown command received')
-
+    # Process message, save it if QoS > 0 and send it
     def _publish(self, request, props):
-
         time_received = float(request.get('time_received'))/10**4
         del request['time_received']
         time_diff = time.time() - time_received
@@ -73,6 +62,7 @@ class Service(amqp_helper.AmqpAgent):
             queue=env['ROUTING_SERVICE'],
             correlation_id=props.correlation_id)
 
+    # Process Publish Acknowledge package (QoS 1)
     def puback(self, request, props):
         pid = request.get('id')
         message, time_received = self.db.get(props.correlation_id, pid)
@@ -83,30 +73,38 @@ class Service(amqp_helper.AmqpAgent):
 
         self.db.delete(props.correlation_id, pid)
 
+    # Process Publish Received package (QoS 2)
     def pubrec(self, request, props):
+        cid = props.correlation_id
         pid = request.get('id')
-        message, time_received = self.db.get(props.correlation_id, pid)
-        code = SUCCESS
+        message, time_received = self.db.get(cid, pid)
+        
+        if request.get('code') >= 0x80:
+            self.db.delete(cid, pid)
+            return None
+
+        if message:
+            self.db.set_received(cid, pid)
+
+        return {
+            'command': 'forward',
+            'type': 'pubrel',
+            'id': pid,
+            'code': SUCCESS if message else PACKET_IDENTIFIER_NOT_FOUND,}
+
+    # Process Publish Complete package (QoS 2)
+    def pubcomp(self, request, props):
+        cid = props.correlation_id
+        pid = request.get('id')
+        message, time_received = self.db.get(cid, pid)
 
         if not message:
-            code = PACKET_IDENTIFIER_NOT_FOUND
-        else:
-            if request.get('code') < 0x80:
-                self.db.set_received(props.correlation_id, pid)
-            else:
-                self.db.delete(props.correlation_id, pid)
+            # The MQTT Protocol does not define how to reply in case of wrong packet id
+            return
 
-        if request.get('code') < 0x80:
-            response = {
-                'command': 'forward',
-                'type': 'pubrel',
-                'id': pid,
-                'code': code,}
-            self.publish(
-                obj=response,
-                queue=env['ROUTING_SERVICE'],
-                correlation_id=props.correlation_id)
+        self.db.delete(cid, pid)
 
     def _connect(self, request, props):
+        cid = props.correlation_id
         receive_max = request.get('properties').get('receive_maximum', 65535)
-        self.db.set_quota(props.correlation_id, receive_max)
+        self.db.set_quota(cid, receive_max)

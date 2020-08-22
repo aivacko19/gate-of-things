@@ -45,6 +45,7 @@ class AmqpAgent(threading.Thread):
         self._prefetch_count = 1
         self._lock = threading.Lock()
         self._lock.acquire()
+        self.actions = {}
         threading.Thread.__init__(self)
 
     def connect(self):
@@ -94,13 +95,24 @@ class AmqpAgent(threading.Thread):
                 
                 continue
 
-            obj_str = body.decode('utf-8')
-            obj = json.loads(obj_str, object_hook=as_bytes)
+            request_string = body.decode('utf-8')
+            request = json.loads(request_string, object_hook=as_bytes)
+            LOGGER.info('Received message: %s', request_string)
 
-            LOGGER.info('Received message: %s', obj_str)
+            if command not in request:
+                continue
+            command = request.get('command')
+            del request['command']
+            LOGGER.info('Command: %s', command)
+
+            action = self.actions.get(command, None)
+            if not action:
+                continue
 
             try:
-                self.main(obj, properties)
+                self.prepare_action(request, properties)
+                response = action(request, properties)
+                self.reply_to_sender(response, properties)
             except Exception as e:
                 LOGGER.error(traceback.format_exc())
 
@@ -181,8 +193,15 @@ class AmqpAgent(threading.Thread):
 
         return obj
 
-    def main(self, request, properties):
+    def prepare_action(self, request, properties):
         pass
+
+    def reply_to_sender(self, response, properties):
+        if response:
+            self.publish(
+                obj=response, 
+                queue=properties.reply_to, 
+                correlation_id=properties.correlation_id,)
 
     def close(self):
         self._closing = True

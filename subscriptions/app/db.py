@@ -42,6 +42,11 @@ DELETE_SUB = """
     AND topic_filter = %s
 """
 
+DELETE_SUB_BY_ID = """
+    DELETE FROM subscription
+    WHERE id = %s
+"""
+
 SELECT = """
     SELECT * FROM session
     WHERE cid = %s
@@ -115,7 +120,7 @@ insert_keys = ['session_id', 'topic_filter', 'subscription_id',
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT_SUB = f"""
     INSERT INTO subscription ({", ".join(insert_keys)})
-    VALUES ({insert_values})
+    VALUES ({insert_values}) RETURNING id
 """
 
 UPDATE = """
@@ -133,6 +138,7 @@ UPDATE_SUB = """
     retain_handling = %s
     WHERE session_id = %s
     AND topic_filter = %s
+    RETURNING id
 """
 
 class Database:
@@ -156,11 +162,15 @@ class Database:
         cursor.execute(SELECT_EMAIL, (email,))
         result = cursor.fetchone()
         if not result:
-            return 0
+            return False
 
         cursor = self.connection.cursor()
         cursor.execute(DELETE_SUB, (result[1], topic,))
-        return cursor.rowcount
+        return cursor.rowcount > 0
+
+    def delete_sub_by_id(self, sub_id):
+        cursor = self.connection.cursor()
+        cursor.execute(DELETE_SUB_BY_ID, (sub_id,))
 
     def get(self, cid):
         cursor = self.connection.cursor()
@@ -211,9 +221,9 @@ class Database:
     def add_sub(self, session, sub):
         exists = self.get_sub(session, sub['filter'])
         if exists:
-            self.update_sub(sub)
+            return self.update_sub(sub)
         else:
-            self.insert_sub(sub)
+            return self.insert_sub(sub)
 
     def insert_sub(self, sub):
         cursor = self.connection.cursor()
@@ -225,6 +235,12 @@ class Database:
             sub.get('no_local'),
             sub.get('retain_as_published'),
             sub.get('retain_handling'),))
+        result = cursor.fetchone()
+        if not result:
+            return 0
+
+        return result[0]
+
 
     def update(self, session):
         cursor = self.connection.cursor()
@@ -240,6 +256,13 @@ class Database:
             sub.get('retain_handling'),
             sub.get('session_id'),
             sub.get('filter'),))
+        
+        result = cursor.fetchone()
+        if not result:
+            return 0
+
+        return result[0]
+
 
     def get_packet_ids(self, session):
         cursor = self.connection.cursor()
@@ -262,6 +285,8 @@ class Database:
     def delete_packet_id(self, session_id, packet_id):
         cursor = self.connection.cursor()
         cursor.execute(DELETE_PACKET_ID, (session_id, packet_id))
+
+        return cursor.rowcount > 0
 
     def close(self):
         self.connection.close()

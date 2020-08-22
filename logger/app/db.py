@@ -9,8 +9,9 @@ ID_INDEX = 0
 USER_INDEX = 1
 RESOURCE_INDEX = 2
 ACTION_INDEX = 3
-OWNER_INDEX = 4
-ACCESS_TIME_INDEX = 5
+SUCCESS_INDEX = 4
+OWNER_INDEX = 5
+ACCESS_TIME_INDEX = 6
 
 CREATE_TABLE = """
     CREATE TABLE IF NOT EXISTS audit_log (
@@ -18,13 +19,22 @@ CREATE_TABLE = """
         client VARCHAR(40),
         resource VARCHAR(40),
         action VARCHAR(40),
+        success VARCHAR(40),
         owner VARCHAR(40),
         access_time TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXIST ownership (
+        resource VARCHAR(40),
+        owner VARCHAR(40),
+        PRIMARY KEY (resource, owner)
+    );
+
     CREATE OR REPLACE FUNCTION get_audit_logs (m_resource varchar(40), m_limit integer, m_offset integer) 
         RETURNS TABLE (
             m_client VARCHAR(40),
             m_action VARCHAR(40),
+            m_success VARCHAR(40),
             m_access_time TIMESTAMP
     ) 
     AS $$
@@ -34,11 +44,13 @@ CREATE_TABLE = """
             action,
             access_time
         FROM
-            audit_log
+            audit_log, ownership
         WHERE
-            resource = m_resource
+            audit_log.resource = m_resource
+        AND
+            audit_log.resource = ownership.resource
         AND 
-            user = owner
+            user = ownership.owner
         ORDER BY access_time DESC
         LIMIT m_limit
         OFFSET m_offset;
@@ -47,7 +59,7 @@ CREATE_TABLE = """
     LANGUAGE 'plpgsql';
 """
 
-insert_keys = ['client', 'resource', 'action', 'owner']
+insert_keys = ['client', 'resource', 'action', 'success', 'owner']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO audit_log ({", ".join(insert_keys)}, access_time)
@@ -60,9 +72,22 @@ SELECT = """
     WHERE resource = %s
 """
 
-SELECT_OWNER = """
+insert_keys = ['owner', 'resource']
+insert_values = ", ".join(['%s'] * len(insert_keys))
+INSERT_OWNERSHIP = f"""
+    INSERT INTO ownership ({", ".join(insert_keys)})
+    VALUES ({insert_values})
+"""
+
+SELECT_OWNERSHIP = """
     SELECT * FROM audit_log
     WHERE owner = %s
+"""
+
+DELETE_OWNERSHIP = """
+    DELETE FROM ownership
+    WHERE owner = %s
+    AND resource = %s
 """
 
 CREATE_USER = """
@@ -77,6 +102,14 @@ GRANT_SELECT = """
     GRANT SELECT ON audit_log TO %s;
 """
 
+GRANT_SELECT_OWNERSHIP = """
+    GRANT SELECT ON ownership TO %s;
+"""
+
+DROP_USER = """
+    DROP USER %s;
+"""
+
 class Database:
 
     def __init__(self, dsn):
@@ -85,13 +118,13 @@ class Database:
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)
 
-    def insert(self, user, resource, action, owner):
+    def insert(self, user, resource, action, success, owner='owner'):
         owner = owner.replace('@', '_at_').replace('.', '_dot_')
         # cursor = self.connection.cursor()
         # cursor.execute(SELECT_OWNER, (owner,))
         # LOGGER.info(cursor.fetchall())
         cursor = self.connection.cursor()
-        cursor.execute(INSERT, (user, resource, action, owner,))
+        cursor.execute(INSERT, (user, resource, action, success, owner,))
         result = cursor.fetchone()
         if result is None:
             return None
@@ -113,6 +146,7 @@ class Database:
                 'user': row[USER_INDEX],
                 'resource': row[RESOURCE_INDEX],
                 'action': row[ACTION_INDEX],
+                'success': row[SUCCESS_INDEX],
                 'owner': row[OWNER_INDEX],
                 'access_time': str(row[ACCESS_TIME_INDEX]),
             }
@@ -120,6 +154,38 @@ class Database:
             logs.append(log)
 
         return logs
+
+    def add_ownership(self, owner, resource):
+        owner = owner.replace('@', '_at_').replace('.', '_dot_')
+
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_OWNERSHIP, (owner,))
+        result = cursor.fetchall()
+        if not result:
+            cursor = self.connection.cursor()
+            cursor.execute(CREATE_USER % owner)
+            cursor = self.connection.cursor()
+            cursor.execute(GRANT_SELECT % owner)
+            cursor = self.connection.cursor()
+            cursor.execute(GRANT_EXECUTE % owner)
+
+        cursor = self.connection.cursor()
+        cursor.execute(INSERT_OWNERSHIP, (owner, resource,))
+
+    def remove_ownership(self, owner, resource):
+        owner = owner.replace('@', '_at_').replace('.', '_dot_')
+        cursor = self.connection.cursor()
+        cursor.execute(DELETE_OWNERSHIP, (owner, resource,))
+        rows_affected = cursor.rowcount
+
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_OWNERSHIP, (owner,))
+        result = cursor.fetchall()
+        if not result:
+            cursor = self.connection.cursor()
+            cursor.execute(DROP_USER % owner)
+
+        return rows_affected
 
     def grant(self, owner):
         owner = owner.replace('@', '_at_').replace('.', '_dot_')

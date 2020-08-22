@@ -12,6 +12,8 @@ CREATE_TABLE = """
         resource VARCHAR(40) NOT NULL,
         read BOOLEAN DEFAULT FALSE,
         write BOOLEAN DEFAULT FALSE,
+        own BOOLEAN DEFAULT FALSE,
+        access_time INT DEFAULT 0
         UNIQUE (user_id, resource)
     );
 """
@@ -21,8 +23,10 @@ USER_INDEX = 1
 RESOURCE_INDEX = 2
 READ_INDEX = 3
 WRITE_INDEX = 4
+OWN_INDEX = 5
+ACCESS_TIME_INDEX = 6
 
-insert_keys = ['user_id', 'resource', 'read', 'write']
+insert_keys = ['user_id', 'resource', 'read', 'write', 'own', 'access_time']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO policy ({", ".join(insert_keys)})
@@ -40,10 +44,17 @@ SELECT_RESOURCE = """
     WHERE resource = %s 
 """
 
+SELECT_OWNED = """
+    SELECT * FROM policy
+    WHERE user = %s
+    AND own = TRUE
+"""
+
 UPDATE = """
     UPDATE policy
     SET read = %s
     AND write = %s
+    AND own = %s
     WHERE user_id = %s
     AND resource = %s
 """
@@ -67,14 +78,16 @@ class Database:
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)
 
-    def add(self, user, resource, read=False, write=False):
+    def add(self, user, resource, read=False, write=False, own=False, access_time=0):
         cursor = self.connection.cursor()
         cursor.execute(SELECT, (user, resource))
         result = cursor.fetchone()
+
         if result:
-            self.update(user, resource, read, write)
-        else:
-            cursor.execute(INSERT, (user, resource, read, write,))
+            return self.update(user, resource, read, write, own)
+        
+        cursor.execute(INSERT, (user, resource, read, write, own, access_time))
+        return cursor.rowcount > 0
 
 
     def get_resource(self, resource):
@@ -89,7 +102,9 @@ class Database:
             policy = {
                 'user': row[USER_INDEX],
                 'read': row[READ_INDEX],
-                'write': row[WRITE_INDEX],}
+                'write': row[WRITE_INDEX],
+                'own': row[OWN_INDEX],
+                'access_time': row[ACCESS_TIME_INDEX]}
             policies[row[USER_INDEX]] = policy
         return policies
 
@@ -99,7 +114,7 @@ class Database:
         result = cursor.fetchone()
         if not result:
             return False
-        return result[READ_INDEX]
+        return result[READ_INDEX], result[ACCESS_TIME_INDEX]
 
     def can_write(self, user, resource):
         cursor = self.connection.cursor()
@@ -109,14 +124,35 @@ class Database:
             return False
         return result[WRITE_INDEX]
 
-    def update(self, user, resource, read=False, write=False):
+    def owns(self, user, resource):
         cursor = self.connection.cursor()
-        cursor.execute(UPDATE, (read, write, user, resource,))
+        cursor.execute(SELECT, (user, resource,))
+        result = cursor.fetchone()
+        if not result:
+            return False
+        return result[OWN_INDEX]
+
+    def update(self, user, resource, read=False, write=False, own=False):
+        cursor = self.connection.cursor()
+        cursor.execute(UPDATE, (read, write, own, user, resource,))
+
+        return cursor.rowcount > 0
 
     def delete(self, user, resource):
         cursor = self.connection.cursor()
         cursor.execute(DELETE, (user, resource,))
 
+        return cursor.rowcount > 0
+
     def delete_resource(self, resource):
         cursor = self.connection.cursor()
         cursor.execute(DELETE_RESOURCE, (resource,))
+
+    def get_owned_resources(self, user):
+        cursor = self.connection.cursor()
+        cursor.execute(SELECT_OWNED, (user,))
+        result = cursor.fetchall()
+        resources = []
+        for row in result:
+            resources.append(row[RESOURCE_INDEX])
+        return resources

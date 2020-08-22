@@ -10,13 +10,16 @@ class Service(amqp_helper.AmqpAgent):
     def __init__(self, queue, redirect_uri):
         self.redirect_uri = redirect_uri
         amqp_helper.AmqpAgent.__init__(self, queue)
+        self.actions = {
+            'oauth_request': self.oauth_request,}
 
-    def main(self, request, props):
-        if not request.get('oauth_request'): return
+    # Retrieve URL for the Indentity provider based on the client id
+    def oauth_request(self, request, props):
 
         provider_cfg = provider.get_cfg()
         authorization_endpoint = provider_cfg["authorization_endpoint"]
 
+        # Saving the callback queue, redirect url if redirected, and client id
         state = {
             'queue': request.get('queue'),
             'redirect_url': request.get('redirect_url'),
@@ -29,10 +32,8 @@ class Service(amqp_helper.AmqpAgent):
             scope=["openid", "email", "profile"],
             state=state_str,)
 
-        response = {
+        return {
             'command': 'oauth_uri',
-            'uri': request_uri}
-        self.publish(
-            obj=response, 
-            queue=props.reply_to, 
-            correlation_id=props.correlation_id,)
+            'uri': request_uri
+        }
+

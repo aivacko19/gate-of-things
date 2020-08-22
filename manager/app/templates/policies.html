@@ -23,6 +23,8 @@
 								<th scope='col'>Email</th>
 								<th scope='col'>Subscribe rights</th>
 								<th scope='col'>Publish rights</th>
+								<th scope='col'>Ownership rights</th>
+								<th scope='col'>Access duration</th>
 								<th></th>
 							</tr>
 						</thead>
@@ -32,6 +34,8 @@
 			<td>{{ policy['user'] }}</td>
 			<td>{{ policy['read'] }}</td>
 			<td>{{ policy['write'] }}</td>
+			<td>{{ policy['own'] }}</td>
+			<td>{{ policy['access_time'] }}s</td>
 			<td><a href="{{ url_for('delete_policy', device_name=device['name'], user=policy['user']) }}" 
 				class="btn btn-primary" role='button'>Delete</a></td>
 		</tr>

@@ -49,7 +49,6 @@ services:
       DSN: postgresql://root:root@conn_db/mydb
       MESSAGE_SERVICE: message-service
       ACCESS_CONTROL_SERVICE: access-control-service
-      DEVICE_SERVICE: device-service
       LOGGER_SERVICE: logger-service
     depends_on:
       - "rabbitmq"
@@ -74,6 +73,7 @@ services:
       AMQP_URL: rabbitmq
       QUEUE: access-control-service
       DSN: postgresql://root:root@conn_db/mydb
+      LOGGER_SERVICE: logger-service
     depends_on:
       - "rabbitmq"
       - "conn_db"
@@ -85,8 +85,6 @@ services:
       AMQP_URL: rabbitmq
       QUEUE: device-service
       DSN: postgresql://root:root@conn_db/mydb
-      ACCESS_CONTROL_SERVICE: access-control-service
-      LOGGER_SERVICE: logger-service
     depends_on:
       - "rabbitmq"
       - "conn_db"
@@ -137,7 +135,6 @@ services:
       DEVICE_SERVICE: device-service
       ACCESS_CONTROL_SERVICE: access-control-service
       SUBSCRIPTION_SERVICE: subscription-service
-      AUDITOR_SERVICE: auditor-service
       AUDIT_LOG_DB: log_db/mydb
     depends_on:
       - "rabbitmq"

@@ -122,7 +122,7 @@ class Database:
     def delete(self, cid, pid):
         cursor = self.connection.cursor()
         cursor.execute(DELETE, (cid, pid))
-        if cursor.fetchone[0] > 0:
+        if cursor.rowcount > 0:
             self.inc_quota(cid)
 
     def set_received(self, cid, pid):

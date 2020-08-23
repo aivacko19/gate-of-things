@@ -10,8 +10,7 @@ USER_INDEX = 1
 RESOURCE_INDEX = 2
 ACTION_INDEX = 3
 SUCCESS_INDEX = 4
-OWNER_INDEX = 5
-ACCESS_TIME_INDEX = 6
+ACCESS_TIME_INDEX = 5
 
 CREATE_TABLE = """
     CREATE TABLE IF NOT EXISTS audit_log (
@@ -20,11 +19,10 @@ CREATE_TABLE = """
         resource VARCHAR(40),
         action VARCHAR(40),
         success VARCHAR(40),
-        owner VARCHAR(40),
         access_time TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXIST ownership (
+    CREATE TABLE IF NOT EXISTS ownership (
         resource VARCHAR(40),
         owner VARCHAR(40),
         PRIMARY KEY (resource, owner)
@@ -42,6 +40,7 @@ CREATE_TABLE = """
         RETURN QUERY SELECT
             client,
             action,
+            success,
             access_time
         FROM
             audit_log, ownership
@@ -59,7 +58,7 @@ CREATE_TABLE = """
     LANGUAGE 'plpgsql';
 """
 
-insert_keys = ['client', 'resource', 'action', 'success', 'owner']
+insert_keys = ['client', 'resource', 'action', 'success']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO audit_log ({", ".join(insert_keys)}, access_time)
@@ -80,7 +79,7 @@ INSERT_OWNERSHIP = f"""
 """
 
 SELECT_OWNERSHIP = """
-    SELECT * FROM audit_log
+    SELECT * FROM ownership
     WHERE owner = %s
 """
 
@@ -110,6 +109,18 @@ DROP_USER = """
     DROP USER %s;
 """
 
+REVOKE_EXECUTE = """
+    REVOKE EXECUTE ON FUNCTION get_audit_logs FROM %s;
+"""
+
+REVOKE_SELECT = """
+    REVOKE SELECT ON audit_log FROM %s;
+"""
+
+REVOKE_SELECT_OWNERSHIP = """
+    REVOKE SELECT ON ownership FROM %s;
+"""
+
 class Database:
 
     def __init__(self, dsn):
@@ -118,13 +129,13 @@ class Database:
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)
 
-    def insert(self, user, resource, action, success, owner='owner'):
-        owner = owner.replace('@', '_at_').replace('.', '_dot_')
+    def insert(self, user, resource, action, success,):
+        # owner = owner.replace('@', '_at_').replace('.', '_dot_')
         # cursor = self.connection.cursor()
         # cursor.execute(SELECT_OWNER, (owner,))
         # LOGGER.info(cursor.fetchall())
         cursor = self.connection.cursor()
-        cursor.execute(INSERT, (user, resource, action, success, owner,))
+        cursor.execute(INSERT, (user, resource, action, success,))
         result = cursor.fetchone()
         if result is None:
             return None
@@ -147,7 +158,6 @@ class Database:
                 'resource': row[RESOURCE_INDEX],
                 'action': row[ACTION_INDEX],
                 'success': row[SUCCESS_INDEX],
-                'owner': row[OWNER_INDEX],
                 'access_time': str(row[ACCESS_TIME_INDEX]),
             }
 
@@ -157,15 +167,24 @@ class Database:
 
     def add_ownership(self, owner, resource):
         owner = owner.replace('@', '_at_').replace('.', '_dot_')
-
         cursor = self.connection.cursor()
         cursor.execute(SELECT_OWNERSHIP, (owner,))
         result = cursor.fetchall()
         if not result:
+            # cursor = self.connection.cursor()
+            # cursor.execute(REVOKE_EXECUTE % owner)
+            # cursor = self.connection.cursor()
+            # cursor.execute(REVOKE_SELECT_OWNERSHIP % owner)
+            # cursor = self.connection.cursor()
+            # cursor.execute(REVOKE_SELECT % owner)
+            # cursor = self.connection.cursor()
+            # cursor.execute(DROP_USER % owner)
             cursor = self.connection.cursor()
             cursor.execute(CREATE_USER % owner)
             cursor = self.connection.cursor()
             cursor.execute(GRANT_SELECT % owner)
+            cursor = self.connection.cursor()
+            cursor.execute(GRANT_SELECT_OWNERSHIP % owner)
             cursor = self.connection.cursor()
             cursor.execute(GRANT_EXECUTE % owner)
 
@@ -182,6 +201,12 @@ class Database:
         cursor.execute(SELECT_OWNERSHIP, (owner,))
         result = cursor.fetchall()
         if not result:
+            cursor = self.connection.cursor()
+            cursor.execute(REVOKE_EXECUTE % owner)
+            cursor = self.connection.cursor()
+            cursor.execute(REVOKE_SELECT_OWNERSHIP % owner)
+            cursor = self.connection.cursor()
+            cursor.execute(REVOKE_SELECT % owner)
             cursor = self.connection.cursor()
             cursor.execute(DROP_USER % owner)
 

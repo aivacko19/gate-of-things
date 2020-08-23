@@ -29,8 +29,7 @@ class Service(amqp_helper.AmqpAgent):
         action = request.get('action')
         success_bool = request.get('success', True)
         success = 'successfull' if success_bool else 'unsuccessful'
-        owner = request.get('owner', 'owner')
-        self.db.insert(user, resource, action, owner)
+        self.db.insert(user, resource, action, success)
 
     # Add log access
     def add_ownership(self, request, props):

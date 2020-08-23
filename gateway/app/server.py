@@ -104,7 +104,7 @@ class Server:
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         context.load_cert_chain(certfile='cert.pem', keyfile='key.pem')
 
-        selector = selectors.DefaultSelector()
+        self.selector = selectors.DefaultSelector()
 
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

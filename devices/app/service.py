@@ -70,10 +70,10 @@ class Service(amqp_helper.AmqpAgent):
             'get_devices_by_name': self.get_devices_by_name,
             'delete_device': self.delete_device,
             'change_key': self.change_key,
-            'disable_device': disable_device,
-            'enable_device': enable_device,
-            'get': get,
-            'add': add,}
+            'disable_device': self.disable_device,
+            'enable_device': self.enable_device,
+            'get': self.get,
+            'add': self.add,}
 
     # Authenticate client
     def authenticate(self, request, props):
@@ -126,7 +126,7 @@ class Service(amqp_helper.AmqpAgent):
 
         email = device_id + DEVICE_EMAIL_SUFFIX
 
-        return {'command': verify, 'email': email}
+        return {'command': 'verify', 'email': email}
 
     # Get a list of devices by owner
     def get_devices(self, request, props):
@@ -137,10 +137,11 @@ class Service(amqp_helper.AmqpAgent):
     # Get a list of devices by name
     def get_devices_by_name(self, request, props):
         names = request.get('names')
-        devices = []
+        devices = {}
         for name in names:
             device = self.db.select(name)
-            devices.append(device)
+            if device:
+                devices[device['name']] = device
         return {'devices': devices}
 
     # Delete a device

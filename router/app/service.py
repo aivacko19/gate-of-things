@@ -50,6 +50,8 @@ class Service(amqp_helper.AmqpAgent):
 
     def reply_to_sender(self, response, properties):
         if response:
+            response['_command'] = response['command']
+            response['command'] = 'main'
             socket, reply_queue = self.conn.get_socket()
             LOGGER.info('Responding with: %s', response)
             self.publish(
@@ -100,6 +102,7 @@ class Service(amqp_helper.AmqpAgent):
                         self.take_over_session(cid)
 
                     cid = self.db.add(self.conn)
+                    request['command'] = request['type']
                     self.redirect(request, 'MESSAGE_SERVICE')
                     if method == 'OAuth2.0':
                         oauth_request = {
@@ -185,6 +188,7 @@ class Service(amqp_helper.AmqpAgent):
             # Message managment
             elif packet_type in ['puback', 'pubrec', 'pubcomp']:
                 response['command'] = 'read'
+                request['command'] = request['type']
                 self.redirect(request, 'MESSAGE_SERVICE')
 
             # Protocol Error

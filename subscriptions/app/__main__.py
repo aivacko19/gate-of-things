@@ -3,6 +3,7 @@
 import os
 import logging
 import threading
+import time
 
 from db import Database
 from service import Service
@@ -28,6 +29,7 @@ class ExpiryTable(threading.Thread):
         self._lock = threading.Lock()
         self._table = {}
         self._closing = False
+        threading.Thread.__init__(self)
 
     def add_entry(self, key, value):
         with self._lock:
@@ -40,10 +42,13 @@ class ExpiryTable(threading.Thread):
             time.sleep(5)
             with self._lock:
                 curr_time = int(time.time())
+                overdue = []
                 for key, value in self._table.items():
                     if value < curr_time:
-                        self.db.delete_sub_by_id(key)
-                        del sel._table[key]
+                        overdue.append(key)
+                for key in overdue:
+                    self.db.delete_sub_by_id(key)
+                    del self._table[key]
 
     def close(self):
         self._closing = True

@@ -102,6 +102,17 @@ class Service(amqp_helper.AmqpAgent):
     # Delete all policies for one resource
     def delete_resource(self, request, props):
         resource = request.get('resource')
+        policies = self.db.get_resource(resource)
+        for policy in policies.values():
+            LOGGER.info(policy)
+            if policy['own']:
+                logger_message = {
+                    'command': 'remove_ownership',
+                    'owner': policy['user'],
+                    'resource': resource,}
+                self.publish(
+                    obj=logger_message,
+                    queue=env['LOGGER_SERVICE'],)
         self.db.delete_resource(resource)
 
     # Get subscribe rights

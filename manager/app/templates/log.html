@@ -16,15 +16,17 @@
 							<tr>
 								<th scope='col'>User</th>
 								<th scope='col'>Action</th>
+								<th scope='col'>Success</th>
 								<th scope='col'>Access Time</th>
 							</tr>
 						</thead>
 						<tbody>
 							{% for log in logs %}
 							<tr>
-								<td>{{ log['access_time'] }}</td>
 								<td>{{ log['user'] }}</td>
 								<td>{{ log['action'] }}</td>
+								<td>{{ log['success'] }}</td>
+								<td>{{ log['access_time'] }}</td>
 							</tr>
 							{% endfor %}
 						</tbody>

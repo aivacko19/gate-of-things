@@ -63,9 +63,9 @@ class Database:
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)
 
-    def insert(self, name, owner, key):
+    def insert(self, name, owner, key, disabled=False):
         cursor = self.connection.cursor()
-        cursor.execute(INSERT, (name, owner, key))
+        cursor.execute(INSERT, (name, owner, key, disabled))
         result = cursor.fetchone()
         if result is None:
             return None

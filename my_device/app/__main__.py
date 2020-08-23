@@ -43,7 +43,7 @@ def reading(server_socket, ac):
         print(packet)
 
 
-DEVICE_NAME = 'my-device2'
+DEVICE_NAME = 'device3'
 # 'my-device'
 URI = '192.168.99.100'
 TOKEN_FORMAT = "SharedAccessSignature sig=%s&se=%s&skn=%s&sr=%s"

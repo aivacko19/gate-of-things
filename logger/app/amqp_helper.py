@@ -99,7 +99,7 @@ class AmqpAgent(threading.Thread):
             request = json.loads(request_string, object_hook=as_bytes)
             LOGGER.info('Received message: %s', request_string)
 
-            if command not in request:
+            if 'command' not in request:
                 continue
             command = request.get('command')
             del request['command']

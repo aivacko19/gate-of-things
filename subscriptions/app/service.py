@@ -68,7 +68,7 @@ class Service(amqp_helper.AmqpAgent):
         qos = request.get('qos')
         
         response = {
-            'command': 'forward',
+            'command': 'forward' if qos > 0 else 'stop',
             'type': 'puback' if qos == 1 else 'pubrec',
             'id': pid,}
 
@@ -81,9 +81,8 @@ class Service(amqp_helper.AmqpAgent):
         topic = request.get('topic')
 
         can_publish = self.authorize_publish(self.session.get_email(), topic)
-        if topic.endswith(CONTROL_SUFFIX)
-            self.log_action(self.session.get_email(), topic[:len(topic)-len(CONTROL_SUFFIX)],
-             'publish', can_publish)
+        if topic.endswith(CONTROL_SUFFIX):
+            self.log_action(self.session.get_email(), topic, 'publish', can_publish)
 
         if not can_publish:
             LOGGER.info('ERROR: %s: Not authorized to publish to the topic %s', cid, topic)
@@ -121,7 +120,7 @@ class Service(amqp_helper.AmqpAgent):
             else:
                 email = self.db.get(receiver_cid).get_email()
                 resource = sub.get_topic_filter()
-                self.log_action(email, resource, 'receive_data', True)
+                self.log_action(email, resource, 'receive', True)
 
                 # Adjusting the publish package
                 message = request.copy()
@@ -133,13 +132,11 @@ class Service(amqp_helper.AmqpAgent):
                 client_map[receiver_cid] = message
 
         for receiver_cid, message in client_map.items():
+            message['command'] = message['type']
             self.publish(
                 obj=message,
                 queue=env['MESSAGE_SERVICE'],
                 correlation_id=receiver_cid)
-
-        if qos == 0:
-            return None
 
         if qos == 2:
             self.db.add_packet_id(cid, pid)
@@ -182,7 +179,7 @@ class Service(amqp_helper.AmqpAgent):
 
             LOGGER.info('%s: Subscribing on topic filter %s', cid, topic_filter)
 
-            read_access, access_time = self.authorize_subscribe(self.session.get_email(), topic_filter):
+            read_access, access_time = self.authorize_subscribe(self.session.get_email(), topic_filter)
             self.log_action(self.session.get_email(), topic_filter, 'subscribe', read_access)
             if not read_access:
                 LOGGER.info('ERROR: %s: Client is not authorized', cid)
@@ -355,6 +352,10 @@ class Service(amqp_helper.AmqpAgent):
     def log_action(self, email, resource, action, success):
         if not resource.startswith(DEVICE_PREFIX):
             return
+
+        resource = resource[len(DEVICE_PREFIX):]
+        if resource.endswith(CONTROL_SUFFIX):
+            resource = resource[:len(resource)-len(CONTROL_SUFFIX)]
 
         response = {
             'command': 'log',

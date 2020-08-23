@@ -86,7 +86,7 @@ def index():
         # Get device properties 
         my_request = {
             'command': 'get_devices_by_name',
-            'names': session['resources']
+            'names': response['resources']
         }
         response = rpc(my_request, 'DEVICE_SERVICE')
         session['devices'] = response['devices']
@@ -130,12 +130,17 @@ def delete_device(device_name):
     if device is None:
         return redirect(url_for('index'))
 
-
     my_request = {
         'command': 'delete_device',
         'name': device_name
     }
     response = rpc(my_request, 'DEVICE_SERVICE')
+
+    my_request = {
+        'command': 'delete_resource',
+        'resource': device_name
+    }
+    response = publish(my_request, 'ACCESS_CONTROL_SERVICE')
 
     del session['devices'][device_name]
 
@@ -220,7 +225,7 @@ def new_device():
     # Grant owner rights for the device
     response = {
         'command': 'add_policy',
-        'user': session[username],
+        'user': session['username'],
         'resource': name,
         'read': True,
         'write': True,
@@ -290,17 +295,15 @@ def delete_policy(device_name, user):
 
     if user in policies:
         policy = session['devices'][device_name]['policies'][user]
-        if policy['own']:
-            return
+        if not policy['own']:
+            del session['devices'][device_name]['policies'][user]
 
-        del session['devices'][device_name]['policies'][user]
-
-        my_request = {
-            'command': 'delete_policy',
-            'resource': device_name,
-            'user': user
-        }
-        publish(my_request, 'ACCESS_CONTROL_SERVICE')
+            my_request = {
+                'command': 'delete_policy',
+                'resource': device_name,
+                'user': user
+            }
+            publish(my_request, 'ACCESS_CONTROL_SERVICE')
 
     return redirect(url_for('policies', device_name=device_name))
 
@@ -327,7 +330,8 @@ def new_policy(device_name):
     read = 'read' in request.form and request.form.get('read') == 'on'
     write = 'write' in request.form and request.form.get('write') == 'on'
     own = 'own' in request.form and request.form.get('own') == 'on'
-    access_time = int(request.form.get('access_time'))
+    access_time_string = request.form.get('access_time', '')
+    access_time = int(access_time_string) if access_time_string.isnumeric() else 0
 
     if user in policies:
         return render_template('new_policy.html', device=device, error_name=True)
@@ -398,7 +402,6 @@ def log(device_name):
     limit = PAGE_SIZE
     offset = (page - 1) * PAGE_SIZE
 
-    resource = 'device/%s' % device_name
     user = session['username'].replace('@', '_at_').replace('.', '_dot_')
     dsn = 'postgres://%s:123@%s' % (user, audit_log_db)
     query = 'SELECT * FROM get_audit_logs(%s, %s, %s)'
@@ -407,14 +410,15 @@ def log(device_name):
     with psycopg2.connect(dsn) as conn:
         conn.autocommit = True
         cursor = conn.cursor()
-        cursor.execute(query, (resource, limit, offset))
+        cursor.execute(query, (device_name, limit, offset))
         result = cursor.fetchall()
         LOGGER.info(result)
         for row in result:
             log = {
                 'user': row[0],
                 'action': row[1],
-                'access_time': row[2]
+                'success': row[2],
+                'access_time': row[3]
             }
             logs.append(log)
 

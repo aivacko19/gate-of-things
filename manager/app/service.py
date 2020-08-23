@@ -6,7 +6,7 @@ class Service(amqp_helper.AmqpAgent):
     def __init__(self, queue, db):
         self.db = db
         amqp_helper.AmqpAgent.__init__(self, queue)
-        self.action = {
+        self.actions = {
             'verify': self.verify,}
 
     # Receive client verification from OAuth service

@@ -13,7 +13,7 @@ CREATE_TABLE = """
         read BOOLEAN DEFAULT FALSE,
         write BOOLEAN DEFAULT FALSE,
         own BOOLEAN DEFAULT FALSE,
-        access_time INT DEFAULT 0
+        access_time INT DEFAULT 0,
         UNIQUE (user_id, resource)
     );
 """
@@ -46,7 +46,7 @@ SELECT_RESOURCE = """
 
 SELECT_OWNED = """
     SELECT * FROM policy
-    WHERE user = %s
+    WHERE user_id = %s
     AND own = TRUE
 """
 
@@ -84,7 +84,7 @@ class Database:
         result = cursor.fetchone()
 
         if result:
-            return self.update(user, resource, read, write, own)
+            return self.update(user, resource, read, write, own,)
         
         cursor.execute(INSERT, (user, resource, read, write, own, access_time))
         return cursor.rowcount > 0
@@ -113,7 +113,7 @@ class Database:
         cursor.execute(SELECT, (user, resource,))
         result = cursor.fetchone()
         if not result:
-            return False
+            return False, 0
         return result[READ_INDEX], result[ACCESS_TIME_INDEX]
 
     def can_write(self, user, resource):
@@ -150,6 +150,7 @@ class Database:
 
     def get_owned_resources(self, user):
         cursor = self.connection.cursor()
+        LOGGER.info(SELECT_OWNED, user)
         cursor.execute(SELECT_OWNED, (user,))
         result = cursor.fetchall()
         resources = []

@@ -30,6 +30,7 @@ WILDCARD_SUBSCRIPTIONS_NOT_AVAILABLE = 0xA2
 UTF8_FORMAT = 1
 
 DEVICE_PREFIX = 'device/'
+DEVICE_EMAIL_SUFFIX = '@device'
 SHARED_ACCESS_SIGNATURE = 'SharedAccessSignature'
 TOKEN_FIELDS = ['sig', 'se', 'skn', 'sr']
 
@@ -123,7 +124,7 @@ class Service(amqp_helper.AmqpAgent):
             LOGGER.info("Algorithm not supported")
             return None
 
-        email = '%s@device' % device_id
+        email = device_id + DEVICE_EMAIL_SUFFIX
 
         return {'command': verify, 'email': email}
 

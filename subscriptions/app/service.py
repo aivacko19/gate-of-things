@@ -26,6 +26,7 @@ UTF8_FORMAT = 1
 
 DEVICE_PREFIX = 'device/'
 CONTROL_SUFFIX = '/ctrl'
+DEVICE_EMAIL_SUFFIX = '@device'
 
 env = {
     'MESSAGE_SERVICE': None,
@@ -288,6 +289,25 @@ class Service(amqp_helper.AmqpAgent):
     def authorize_subscribe(self, email, topic):
         if not topic.startswith(DEVICE_PREFIX):
             return True, 0
+
+        # Strip topic from prefix and sufix
+        is_device_control_topic = topic.endswith(CONTROL_SUFFIX)
+        topic = topic[len(DEVICE_PREFIX):]
+        if is_device_control_topic:
+            topic = topic[:len(topic)-len(CONTROL_SUFFIX)]
+
+        # Authorize device
+        if email.endswith(DEVICE_EMAIL_SUFFIX):
+            device_name = email[:len(email)-len(DEVICE_EMAIL_SUFFIX)]
+            if is_device_control_topic:
+                return topic == device_name, 0
+            else:
+                return False, 0
+
+        # Authorize client
+        if is_device_control_topic:
+            return False, 0
+
         request = {
             'command': 'get_read_access',
             'user': email,
@@ -304,6 +324,25 @@ class Service(amqp_helper.AmqpAgent):
     def authorize_publish(self, email, topic):
         if not topic.startswith(DEVICE_PREFIX):
             return True
+
+        # Strip topic from prefix and sufix
+        is_device_control_topic = topic.endswith(CONTROL_SUFFIX)
+        topic = topic[len(DEVICE_PREFIX):]
+        if is_device_control_topic:
+            topic = topic[:len(topic)-len(CONTROL_SUFFIX)]
+
+        # Authorize device
+        if email.endswith(DEVICE_EMAIL_SUFFIX):
+            device_name = email[:len(email)-len(DEVICE_EMAIL_SUFFIX)]
+            if is_device_control_topic:
+                return False
+            else:
+                return topic == device_name
+
+        #Authorize client
+        if not is_device_control_topic:
+            return False
+
         request = {
             'command': 'get_write_access',
             'user': email,

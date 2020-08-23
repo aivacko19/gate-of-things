@@ -39,7 +39,7 @@ class Service(amqp_helper.AmqpAgent):
         read = request.get('read')
         write = request.get('write')
         own = request.get('own', False)
-        access_time = request.get('access_time')
+        access_time = request.get('access_time', 0)
 
         # Save previous ownership status
         prev_own = self.db.owns(user, resource,)

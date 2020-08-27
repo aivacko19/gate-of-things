@@ -33,7 +33,7 @@ CONNECTION_PARAMETERS = pika.ConnectionParameters(
     retry_delay=5,
     heartbeat=0,)
 
-class AmqpAgent(threading.Thread):
+class AbstractService(threading.Thread):
 
     def __init__(self, queue=None):
         self._connection = None

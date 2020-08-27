@@ -1,5 +1,6 @@
-from oauthlib import oauth2
 import json
+
+from oauthlib import oauth2
 import requests
 
 CLIENT_ID = None

@@ -8,7 +8,7 @@ import nacl.encoding
 import nacl.signing
 import nacl.exceptions
 
-import amqp_helper
+import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,11 +59,11 @@ def parse_token(token_string):
 
     return rawtoken
 
-class Service(amqp_helper.AmqpAgent):
+class Service(abstract_service.AbstractService):
 
     def __init__(self, queue, db):
         self.db = db
-        amqp_helper.AmqpAgent.__init__(self, queue)
+        abstract_service.AbstractService.__init__(self, queue)
         self.actions = {
             'authenticate': self.authenticate,
             'get_devices': self.get_devices,
@@ -78,55 +78,64 @@ class Service(amqp_helper.AmqpAgent):
     # Authenticate client
     def authenticate(self, request, props):
         device_id = props.correlation_id
+        resource_uri = request.get('resource_uri')
+        token = request.get('token')
         device = self.db.select(device_id)
+
+        response = {'command': 'verify', 'email': None}
         if device is None:
             LOGGER.info("No device found")
-            return None
+            return response
 
-        resource_uri = request.get('username')
+        b64_public_key = device.get('key')
+        if b64_public_key is None:
+            LOGGER.info("No public key")
+            return response
+
         if not resource_uri.endswith(device_id):
             LOGGER.info("Wrong resource uri")
-            return None
+            return response
         
-        token = request.get('password')
         rawtoken = parse_token(token.decode('utf-8'))
         if rawtoken is None:
             LOGGER.info("Wrong token format")
-            return None
+            return response
 
+        # Extracting fields from the token           // service.py - Device Registry
         signature = rawtoken.get('sig')
         expiry = rawtoken.get('se')
-        policy = rawtoken.get('skn', 'ed25519')
+        policy = rawtoken.get('skn')
         url_encoded_resource_uri = rawtoken.get('sr')
 
+        # Check token fields for validity
         if float(expiry) < time.time():
             LOGGER.info("Expired")
-            return None
+            return response
 
         if parse.quote_plus(resource_uri) != url_encoded_resource_uri:
             LOGGER.info("Wrong url encoded resource format")
-            return None
+            return response
 
-        message = '%s\n%s' % (url_encoded_resource_uri, expiry)
-        b64key = device.get('key')
-        if b64key is None:
-            LOGGER.info("No public key")
-            return None
+        # Message that is signed by private key
+        message = url_encoded_resource_uri + '\n' + expiry
 
+        # Ed25519 algorithm
         if policy == 'ed25519':
             try:
-                verify_key = nacl.signing.VerifyKey(b64key, encoder=nacl.encoding.URLSafeBase64Encoder)
-                verify_key.verify(message.encode('utf-8'), b64decode(signature))
+                # Exctract the public key from Base64 encoding for Ed25519 algorithm
+                public_key = nacl.signing.VerifyKey(b64_public_key, 
+                    encoder=nacl.encoding.URLSafeBase64Encoder)
+                # Verify the signature using the 
+                public_key.verify(message.encode('utf-8'), b64decode(signature))
             except nacl.exceptions.BadSignatureError:
                 LOGGER.info('Bad Signature')
-                return None
+                return response
         else:
             LOGGER.info("Algorithm not supported")
-            return None
+            return response
 
-        email = device_id + DEVICE_EMAIL_SUFFIX
-
-        return {'command': 'verify', 'email': email}
+        response['email'] = device_id + DEVICE_EMAIL_SUFFIX
+        return response
 
     # Get a list of devices by owner
     def get_devices(self, request, props):

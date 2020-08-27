@@ -3,7 +3,7 @@ import os
 import time
 import logging
 
-import amqp_helper
+import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,17 +26,17 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = service
 
-class Service(amqp_helper.AmqpAgent):
+class Service(abstract_service.AbstractService):
 
     def __init__(self, queue, db):
         self.db = db
-        amqp_helper.AmqpAgent.__init__(self, queue)
+        abstract_service.AbstractService.__init__(self, queue)
         self.actions = {
             'publish': self._publish,
             'puback': self.puback,
             'pubrec': self.pubrec,
             'pubcomp': self.pubcomp,
-            'connect': self._connect,}
+            'set_quota': self.set_quota,}
 
     # Process message, save it if QoS > 0 and send it
     def _publish(self, request, props):
@@ -104,7 +104,7 @@ class Service(amqp_helper.AmqpAgent):
 
         self.db.delete(cid, pid)
 
-    def _connect(self, request, props):
+    def set_quota(self, request, props):
         cid = props.correlation_id
-        receive_max = request.get('properties').get('receive_maximum', 65535)
+        receive_max = request.get('receive_maximum', 65535)
         self.db.set_quota(cid, receive_max)

@@ -1,3 +1,2 @@
 pika
 psycopg2
-PyNaCl

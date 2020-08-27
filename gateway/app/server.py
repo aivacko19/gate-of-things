@@ -9,8 +9,10 @@ import os
 LOGGER = logging.getLogger(__name__)
 
 class Server:
-    def __init__(self, host):
+    def __init__(self, host, port, safe_port):
         self.host = host
+        self.port = port
+        self.safe_port = safe_port
         self.stop_flag = False
         self.listener = None
         self.listener_safe = None
@@ -97,8 +99,14 @@ class Server:
     def on_close(self):
         pass
 
-    def loop(self):
+    def in_loop_action(self):
         pass
+
+    def disconnect(self, client):
+        self.on_disconnect(client)
+        self.unregister(client)
+        self.safe_close(client)
+
 
     def start(self):
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -108,14 +116,14 @@ class Server:
 
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind((self.host, self.protocol.port))
+        listener.bind((self.host, self.port))
         listener.listen()
         self.register_listener(listener)
         self.listener = listener
 
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind((self.host, self.protocol.port_safe))
+        listener.bind((self.host, self.safe_port))
         listener.listen()
         self.register_listener(listener)
         self.listener_safe = listener
@@ -123,73 +131,43 @@ class Server:
         self.on_start()
 
         try:
-            while True:
-                events = self.selector.select(timeout=0)
-                for key, mask in events:
 
+            # Server loop                                                            // server.py
+            while True:
+                # Processing events from sockets
+                events = self.selector.select(timeout=0)
+                for key, mask in events: 
+                    # Accept new connection from client
                     if key.data is None:
                         listener = key.fileobj
-                        safe = listener.getsockname()[1] == 8887
-                        sock, addr = listener.accept()
-                        client = sock
-                        if safe:
-                            client = context.wrap_socket(sock, server_side=True)
-                        LOGGER.info('Client %s - connecting', client.fileno())
-                        buff = self.get_empty_buffer()
-                        self.register_client(client, buff, selectors.EVENT_READ)
+                        client, addr = listener.accept()
+                        if listener == self.listener_safe: 
+                            client = context.wrap_socket(client, server_side=True)
+                        self.register_client(client, self.get_empty_buffer(), selectors.EVENT_READ)
                         self.on_connect(client)
-
                     else:
-                        client = key.fileobj
-                        buff = key.data
-
-                        # TODO Change address to file descriptor
-
-
+                        client, package_buffer = key.fileobj, key.data
+                        # Read package from client
                         if mask is selectors.EVENT_READ:
-                            LOGGER.info('Client %s - reading', client.fileno())
-
                             try:
                                 data = client.recv(4096)
-                            except BlockingIOError:
-                                # Resource temporarily unavailable (errno EWOULDBLOCK)
+                            except (BlockingIOError, ConnectionResetError):
                                 continue
-                            except ConnectionResetError:
-                                continue
-                            if not data:
-                                LOGGER.info('Client %s - disconnecting', client.fileno())
-                                self.on_disconnect(client)
-                                self.unregister(client)
-                                self.safe_close(client)
-                                continue
-
-                            self.on_read(client, data, buff)
-
+                            if not data: self.disconnect(client)
+                            else: self.on_read(client, data, package_buffer)
+                        # Write package to client
                         elif mask is selectors.EVENT_WRITE:
-                            LOGGER.info('Client %s - writing', client.fileno())
-
-                            data = self.get_data(buff, 4096)
-
+                            data = self.get_data(package_buffer, 4096)
                             try:
                                 sent = client.send(data)
                             except BlockingIOError:
-                                # Resource temporarily unavailable (errno EWOULDBLOCK)
                                 continue
+                            self.set_position(package_buffer, sent)
+                            if self.is_empty(package_buffer): self.on_write(client)
+                # Additional processing in each iteration implemented by child class
+                self.in_loop_action() 
 
-                            self.set_position(buff, sent)
-
-                            if not self.is_empty(buff):
-                                LOGGER.info('Client %s:%s - continue writing', addr[0], addr[1])
-                                continue
-                            
-
-                            LOGGER.info('Client %s:%s - finish writing', addr[0], addr[1])
-                            self.on_write(client)
-
-                self.loop()
-
-                if self.stop_flag:
-                    break
+                if self.stop_flag: break
 
         except KeyboardInterrupt:
             LOGGER.info('Caught keyboard interrupt, exiting...')

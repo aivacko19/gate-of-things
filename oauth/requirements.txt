@@ -1,5 +1,5 @@
 pika
+oauthlib
 requests
 flask
-oauthlib
 pyopenssl

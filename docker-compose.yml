@@ -21,7 +21,7 @@ services:
       AMQP_URL: rabbitmq
       QUEUE: routing-service
       DSN: postgresql://root:root@conn_db/mydb
-      OAUTH_URI_SERVICE: oauth-service
+      OAUTH_SERVICE: oauth-service
       SUBSCRIPTION_SERVICE: subscription-service
       MESSAGE_SERVICE: message-service
       DEVICE_SERVICE: device-service
@@ -100,6 +100,25 @@ services:
     depends_on:
       - "rabbitmq"
       - "log_db"
+  manager:
+    build: ./manager
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./manager:/usr/src/app
+    environment:
+      AMQP_URL: rabbitmq
+      QUEUE: manager-service
+      DSN: postgresql://root:root@conn_db/mydb
+      OAUTH_SERVICE: oauth-service
+      DEVICE_SERVICE: device-service
+      ACCESS_CONTROL_SERVICE: access-control-service
+      SUBSCRIPTION_SERVICE: subscription-service
+      AUDIT_LOG_DB: log_db/mydb
+    depends_on:
+      - "rabbitmq"
+      - "conn_db"
+      - "log_db"
   rabbitmq:
     image: rabbitmq:3.8-alpine
     ports:
@@ -122,25 +141,6 @@ services:
       POSTGRES_USER: root
       POSTGRES_PASSWORD: root
       POSTGRES_DB: mydb
-  manager:
-    build: ./manager
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./manager:/usr/src/app
-    environment:
-      AMQP_URL: rabbitmq
-      QUEUE: manager-service
-      DSN: postgresql://root:root@conn_db/mydb
-      OAUTH_URI_SERVICE: oauth-service
-      DEVICE_SERVICE: device-service
-      ACCESS_CONTROL_SERVICE: access-control-service
-      SUBSCRIPTION_SERVICE: subscription-service
-      AUDIT_LOG_DB: log_db/mydb
-    depends_on:
-      - "rabbitmq"
-      - "conn_db"
-      - "log_db"
 
 volumes:
   conn-db-data:

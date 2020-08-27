@@ -5,52 +5,48 @@ import json
 import flask
 import requests
 
-import amqp_helper
+import abstract_service
 from providers import google as provider
 
 app = flask.Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 
-my_agent = amqp_helper.AmqpAgent()
+my_agent = abstract_service.AbstractService()
 my_agent.connect()
 
-@app.route("/")
+@app.route("/")#                                                   // callback.py
 def index():
-
-    # Get Code
+    # Get code and state from OAuth server notification
     code = flask.request.args.get("code")
     state_str = flask.request.args.get("state")
     state = json.loads(state_str)
-    user_reference = state.get('user_reference')
 
-    # Get Token with Code
+    # Request token from OAuth server using code
     provider_cfg = provider.get_cfg()
     token_endpoint = provider_cfg["token_endpoint"]
     token_url, headers, body = provider.client.prepare_token_request(
         token_endpoint,
         authorization_response=flask.request.url,
         redirect_url=flask.request.base_url,
-        code=code
-    )
+        code=code,)
     token_response = requests.post(
         token_url,
         headers=headers,
         data=body,
-        auth=(provider.CLIENT_ID, provider.CLIENT_SECRET),
-    )
+        auth=(provider.CLIENT_ID, provider.CLIENT_SECRET),)
     provider.client.parse_request_body_response(json.dumps(token_response.json()))
 
-    # Get User Info with Token
+    # Request user info from OAuth server using token and extract email
     userinfo_endpoint = provider_cfg["userinfo_endpoint"]
     uri, headers, body = provider.client.add_token(userinfo_endpoint)
     userinfo = requests.get(uri, headers=headers, data=body).json()
+    email_verified = userinfo.get('email_verified')
+    email = userinfo.get('email')
 
-    # Prepare email and response
-    if not userinfo.get("email_verified"):
-        email = None
+    # Prepare response
+    if not email_verified:
         response = ("User email not available or not verified by Google.", 400)
     else:
-        email = userinfo["email"]
         if state.get('redirect_url'):
             response = flask.redirect(state.get('redirect_url'))
         else:
@@ -60,10 +56,10 @@ def index():
 
     request = {
         'command': 'verify',
-        'email': email}
+        'email': email if email_verified else None}
     my_agent.publish(
         obj=request, 
         queue=state.get('queue'), 
-        correlation_id=user_reference,)
+        correlation_id=state.get('user_reference'),)
 
     return response

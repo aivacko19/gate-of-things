@@ -1,20 +1,20 @@
 
 from providers import google as provider 
-import amqp_helper
+import abstract_service
 import json
 
 CONTINUE_AUTHENTICATION = 0x18
 
-class Service(amqp_helper.AmqpAgent):
+class Service(abstract_service.AbstractService):
 
     def __init__(self, queue, redirect_uri):
         self.redirect_uri = redirect_uri
-        amqp_helper.AmqpAgent.__init__(self, queue)
+        abstract_service.AbstractService.__init__(self, queue)
         self.actions = {
-            'oauth_request': self.oauth_request,}
+            'get_uri': self.get_uri,}
 
     # Retrieve URL for the Indentity provider based on the client id
-    def oauth_request(self, request, props):
+    def get_uri(self, request, props):
 
         provider_cfg = provider.get_cfg()
         authorization_endpoint = provider_cfg["authorization_endpoint"]

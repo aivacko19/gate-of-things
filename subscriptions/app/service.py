@@ -3,7 +3,7 @@ import os
 import time
 import logging
 
-import amqp_helper
+import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,18 +40,18 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = service
 
-class Service(amqp_helper.AmqpAgent):
+class Service(abstract_service.AbstractService):
 
     def __init__(self, queue, db, expiry_table):
         self.db = db
         self.expiry_table = expiry_table
-        amqp_helper.AmqpAgent.__init__(self, queue)
+        abstract_service.AbstractService.__init__(self, queue)
         self.actions = {
             'publish': self._publish,
             'pubrel': self.pubrel,
             'subscribe': self.subscribe,
             'unsubscribe': self.unsubscribe,
-            'fetch_session': self.fetch_session,
+            'get_session': self.get_session,
             'create_session': self.create_session,
             'reauthenticate': self.reauthenticate,
             'get_subscriptions': self.get_subscriptions,
@@ -66,83 +66,65 @@ class Service(amqp_helper.AmqpAgent):
         cid = props.correlation_id
         pid = request.get('id')
         qos = request.get('qos')
-        
-        response = {
-            'command': 'forward' if qos > 0 else 'stop',
-            'type': 'puback' if qos == 1 else 'pubrec',
-            'id': pid,}
-
-        pid_in_use = self.db.is_pid_in_use(cid, pid)
-        if qos > 0 and pid_in_use:
-            LOGGER.info('ERROR: %s: Packet identifier in use', cid)
-            response['code'] = PACKET_IDENTIFIER_IN_USE
-            return response
-
         topic = request.get('topic')
+        payload = request.get('payload')
+        properties = request.get('properties')
+        pid_in_use = qos > 0 and self.db.is_pid_in_use(cid, pid)
+        payload_format = properties.get('payload_format_indicator') if properties else 0
+        payload_format_invalid = False
+        try:
+            payload.decode('utf-8')
+        except UnicodeDecodeError as e:
+            payload_format_invalid = payload_format == UTF8_FORMAT
+        subs = self.db.get_matching_subs(topic)
+        response_type = 'puback' if qos == 1 else 'pubrec'
+        code = 0
 
+        # Authorize publishing to device
         can_publish = self.authorize_publish(self.session.get_email(), topic)
-        if topic.endswith(CONTROL_SUFFIX):
-            self.log_action(self.session.get_email(), topic, 'publish', can_publish)
-
         if not can_publish:
             LOGGER.info('ERROR: %s: Not authorized to publish to the topic %s', cid, topic)
-            response['code'] = NOT_AUTHORIZED
-            return response
-
-        payload = request.get('payload')
-        payload_format = request.get('properties').get('payload_format_indicator')
-        if payload_format == UTF8_FORMAT:
-            try:
-                payload.decode('utf-8')
-            except UnicodeDecodeError as e:
-                LOGGER.info('ERROR: %s: Payload format is invalid', cid)
-                response['code'] = PAYLOAD_FORMAT_INVALID
-                return response
-
-        subs = self.db.get_matching_subs(topic)
-
-        if not subs:
+            code = NOT_AUTHORIZED
+        elif pid_in_use:
+            LOGGER.info('ERROR: %s: Packet identifier in use', cid)
+            code = PACKET_IDENTIFIER_IN_USE
+        elif payload_format_invalid:
+            LOGGER.info('ERROR: %s: Payload format is invalid', cid)
+            code = PAYLOAD_FORMAT_INVALID
+        elif not subs:
             LOGGER.info('%s: No matching subscriptions', cid)
-            response['code'] = NO_MATCHING_SUBSCRIPTIONS
-            return response
-
-        # Sending a copy of the message to each subscriber
-        client_map = {}
-        for sub in subs:
-            receiver_cid = sub.get_session_id()
-
-            if sub.get_no_local() and receiver_cid == cid:
-                continue
-
-            if client_map.get(receiver_cid):
-                if sub.get_sub_id():
-                    client_map[receiver_cid]['properties']['subscription_identifier'].append(sub.get_sub_id())
-            else:
-                email = self.db.get(receiver_cid).get_email()
-                resource = sub.get_topic_filter()
-                self.log_action(email, resource, 'receive', True)
-
-                # Adjusting the publish package
+            code = NO_MATCHING_SUBSCRIPTIONS
+        else:
+            code = SUCCESS
+            if qos == 2: self.db.add_packet_id(cid, pid)
+            # Sending a copy of the message to each subscriber
+            client_map = {}
+            for sub in subs:
+                receiver_cid = sub.get_session_id()
+                # If no local flag set, no sending back to publisher
+                if sub.get_no_local() and receiver_cid == cid: continue
+                # Multiple occurrence of subscriber
+                if client_map.get(receiver_cid):
+                    if sub.get_sub_id(): client_map[receiver_cid]['sids'].append(sub.get_sub_id())
+                    continue
+                    
                 message = request.copy()
+                message['command'] = 'publish'
                 message['topic'] = sub.get_topic_filter()
                 message['qos'] = min(request.get('qos'), sub.get_max_qos())
-                message['properties']['subscription_identifier'] = list()
-                if sub.get_sub_id():
-                    message['properties']['subscription_identifier'].append(sub.get_sub_id())
+                message['sids'] = list()
+                if sub.get_sub_id(): message['sids'].append(sub.get_sub_id())
                 client_map[receiver_cid] = message
+            for receiver_cid, message in client_map.items():
+                email = self.db.get(receiver_cid).get_email()
+                # Log receiving of message
+                self.log_action(email, message['topic'], 'receive', True)
+                message['properties']['subscription_identifier'] = message['sids']
+                self.publish(obj=message, queue=env['MESSAGE_SERVICE'], correlation_id=receiver_cid)
 
-        for receiver_cid, message in client_map.items():
-            message['command'] = message['type']
-            self.publish(
-                obj=message,
-                queue=env['MESSAGE_SERVICE'],
-                correlation_id=receiver_cid)
-
-        if qos == 2:
-            self.db.add_packet_id(cid, pid)
-
-        response['code'] = SUCCESS
-        return response
+        # Log attempt of access
+        self.log_action(self.session.get_email(), topic, 'publish', code in [SUCCESS, NO_MATCHING_SUBSCRIPTIONS])
+        if qos > 0: return {'command': 'forward', 'type': response_type, 'id': pid, 'code': code,}
 
     # Process Publish Release package (QoS 2)
     def pubrel(self, request, props):
@@ -160,53 +142,37 @@ class Service(amqp_helper.AmqpAgent):
             'id': pid,
             'code': SUCCESS if pid_in_use else PACKET_IDENTIFIER_NOT_FOUND,}
 
-    # Process Subscribe request
+    # Process subscribe request                                             // service.py - Subscription Manager
     def subscribe(self, request, props):
         cid = props.correlation_id
-        pid = request.get('id')
-        topics = request.get('topics')
-        
+        pid, topics, properties = request.get('id'), request.get('topics'), request.get('properties')
+        subscription_identifier = properties.get('subscription_identifier') if properties else 0
+        pid_in_use = self.db.is_pid_in_use(cid, pid)
         codes = list()
-
+        # Processing multiple topics from request
         for topic in topics:
             topic_filter = topic.get('filter')
-
-            pid_in_use = self.db.is_pid_in_use(cid, pid)
-            if pid_in_use:
-                LOGGER.info('ERROR: %s: Packet identifier in use', cid)
-                codes.append({'code': PACKET_IDENTIFIER_IN_USE})
-                continue
-
+            topic['session_id'], topic['sub_id'] = subscription_identifier, cid
             LOGGER.info('%s: Subscribing on topic filter %s', cid, topic_filter)
 
+            # Checking subscription rights 
             read_access, access_time = self.authorize_subscribe(self.session.get_email(), topic_filter)
-            self.log_action(self.session.get_email(), topic_filter, 'subscribe', read_access)
+            # Logging attempt of access
+            self.log_action(self.session.get_email(), topic_filter, 'subscribe', read_access and not pid_in_use)
+
             if not read_access:
                 LOGGER.info('ERROR: %s: Client is not authorized', cid)
-                codes.append({'code': NOT_AUTHORIZED})
-                continue
-
-            if request.get('properties'):
-                topic['sub_id'] = request.get('properties').get('subscription_identifier') or 0
+                code = NOT_AUTHORIZED
+            elif pid_in_use:
+                LOGGER.info('ERROR: %s: Packet identifier in use', cid)
+                code = PACKET_IDENTIFIER_IN_USE
             else:
-                topic['sub_id'] = 0
-            topic['session_id'] = cid
-            s_id = self.db.add_sub(self.session, topic)
+                s_id = self.db.add_sub(topic)
+                code = topic.get('max_qos')
+                if access_time > 0: self.expiry_table.add_entry(s_id, access_time)
+            codes.append({'code': code})
 
-            if access_time > 0:
-                actual_time = int(time.time()) + access_time
-                self.expiry_table.add_entry(s_id, actual_time)
-
-            codes.append({'code': topic.get('max_qos')})
-
-        if not codes:
-            return None
-
-        return {
-            'command': 'forward',
-            'type': 'suback',
-            'id': pid,
-            'topics': codes,}
+        if codes: return {'command': 'forward', 'type': 'suback', 'id': pid, 'topics': codes,}
 
     # Process Unsubscribe request
     def unsubscribe(self, request, props):
@@ -226,7 +192,7 @@ class Service(amqp_helper.AmqpAgent):
                 continue
 
             LOGGER.info('%s: Unsubscribing from topic filter %s', cid, topic_filter)
-            sub = self.db.get_sub(self.session, topic_filter)
+            sub = self.db.get_sub(cid, topic_filter)
 
             if not sub:
                 LOGGER.info('ERROR: %s: Subscription not existed', cid)
@@ -249,7 +215,7 @@ class Service(amqp_helper.AmqpAgent):
             'topics': codes,}
 
     # Get session data if session exists
-    def fetch_session(self, request, props):
+    def get_session(self, request, props):
         return {'email': self.session.get_email() if self.session else None}
 
     # Create new session, delete if session exists
@@ -259,6 +225,9 @@ class Service(amqp_helper.AmqpAgent):
         if self.session:
             self.db.delete(self.session)
         self.db.add(cid, email)
+        if email.endswith('@device'):
+            topic_filter = DEVICE_PREFIX + cid + CONTROL_SUFFIX
+            self.db.add_sub({'filter': topic_filter, 'session_id': cid,})
 
     # Update client email
     def reauthenticate(self, request, props):
@@ -356,6 +325,8 @@ class Service(amqp_helper.AmqpAgent):
         resource = resource[len(DEVICE_PREFIX):]
         if resource.endswith(CONTROL_SUFFIX):
             resource = resource[:len(resource)-len(CONTROL_SUFFIX)]
+        elif email == resource + '@device' and action == 'publish':
+            return
 
         response = {
             'command': 'log',
@@ -427,7 +398,7 @@ class Service(amqp_helper.AmqpAgent):
     #                 'id': request.get('id'),
     #                 'topics': codes,}
 
-    #     elif command == 'fetch_session':
+    #     elif command == 'get_session':
     #         LOGGER.info('Received command get')
     #         response = {
     #             'email': self.session.get_email() if self.session else None}

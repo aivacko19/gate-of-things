@@ -2,7 +2,7 @@
 import os
 import logging
 
-import amqp_helper
+import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 
@@ -16,11 +16,11 @@ for key in env:
         raise Exception('Environment variable %s not defined', key)
     env[key] = service
 
-class Service(amqp_helper.AmqpAgent):
+class Service(abstract_service.AbstractService):
 
     def __init__(self, queue, db):
         self.db = db
-        amqp_helper.AmqpAgent.__init__(self, queue)
+        abstract_service.AbstractService.__init__(self, queue)
         self.actions = {
             'add_policy': self.add_policy,
             'update_policy': self.update_policy,

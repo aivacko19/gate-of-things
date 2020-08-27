@@ -32,6 +32,7 @@ class ExpiryTable(threading.Thread):
         threading.Thread.__init__(self)
 
     def add_entry(self, key, value):
+        value = value + int(time.time())
         with self._lock:
             self._table[key] = value
 

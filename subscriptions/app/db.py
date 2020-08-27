@@ -187,9 +187,9 @@ class Database:
             session.add_sub(Subscription(sub))
         return session
 
-    def get_sub(self, session, topic_filter):
+    def get_sub(self, cid, topic_filter):
         cursor = self.connection.cursor()
-        cursor.execute(SELECT_SUB, (session.get_id(), topic_filter))
+        cursor.execute(SELECT_SUB, (cid, topic_filter))
         result = cursor.fetchone()
         if not result: return None
         return Subscription(result)
@@ -218,8 +218,8 @@ class Database:
         cursor = self.connection.cursor()
         cursor.execute(INSERT, (cid, email))
 
-    def add_sub(self, session, sub):
-        exists = self.get_sub(session, sub['filter'])
+    def add_sub(self, sub):
+        exists = self.get_sub(sub.get('session_id'), sub.get('filter'))
         if exists:
             return self.update_sub(sub)
         else:
@@ -230,11 +230,11 @@ class Database:
         cursor.execute(INSERT_SUB, (
             sub.get('session_id'),
             sub.get('filter'),
-            sub.get('sub_id'),
-            sub.get('max_qos'),
-            sub.get('no_local'),
-            sub.get('retain_as_published'),
-            sub.get('retain_handling'),))
+            sub.get('sub_id', 0),
+            sub.get('max_qos', 2),
+            sub.get('no_local', False),
+            sub.get('retain_as_published', False),
+            sub.get('retain_handling', 0),))
         result = cursor.fetchone()
         if not result:
             return 0
@@ -249,11 +249,11 @@ class Database:
     def update_sub(self, sub):
         cursor = self.connection.cursor()
         cursor.execute(UPDATE_SUB, (
-            sub.get('sub_id'),
-            sub.get('max_qos'),
-            sub.get('no_local'),
-            sub.get('retain_as_published'),
-            sub.get('retain_handling'),
+            sub.get('sub_id', 0),
+            sub.get('max_qos', 2),
+            sub.get('no_local', False),
+            sub.get('retain_as_published', False),
+            sub.get('retain_handling', 0),
             sub.get('session_id'),
             sub.get('filter'),))
         

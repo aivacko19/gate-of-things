@@ -156,6 +156,12 @@ class Connection:
     def set_method(self, method):
         self.method = method
 
+    def set_parameters(self, cid, random_id, clean_start, method):
+        self.id = cid
+        self.random_id = random_id
+        self.clean_start = clean_start
+        self.method = method
+
     def set_email(self, email):
         self.email = email
 

@@ -1,11 +1,9 @@
 pika
-requests
-flask
-oauthlib
-pyopenssl
 psycopg2
+flask
 flask-appconfig>=0.10
 flask-bootstrap
 flask-nav
 flask-debug
 flask-wtf
+pyopenssl

@@ -22,38 +22,39 @@ class UnsupportedProtocolError(Exception):
 
 def read(stream):
     packet = {}
-    packet_type, dup, qos, retain = stream.get_header()
-    stream.get_var_int()
-    packet['type'] = packet_type
-    logging.info(f"Received {packet_type} packet type")
     try:
-        if packet_type == RESERVED:
+
+        # Parse fixed header                                                                // parser.py
+        packet['type'], dup, qos, retain = stream.get_header()
+        if packet['type'] == RESERVED:
             raise MalformedPacketError("Bad packet type")
+        elif packet['type'] == PUBLISH:
+            if qos not in range(3): raise MalformedPacketError("Bad QoS")
+            packet['dup'], packet['qos'], packet['retain'] = dup, qos, retain
+        elif dup or retain or qos != 0: raise MalformedPacketError("Bytes 0-3 reserved")
+        stream.get_var_int()
 
-        if packet_type == PUBLISH:
-            if qos not in range(3):
-                raise MalformedPacketError("Bad QoS")
-            packet['dup'] = dup
-            packet['qos'] = qos
-            packet['retain'] = retain
-            read_pub_packet(packet, stream)
-            return packet
-
-        if dup or retain or qos != 0:
-            raise MalformedPacketError("Bytes 0-3 reserved")
-        if packet_type in [SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK]:
-            read_sub_packet(packet, stream)
-        elif packet_type == CONNECT:
-            read_connect_packet(packet, stream)
-        elif packet_type not in [PINGREQ, PINGRESP]:
-            if packet_type == CONNACK:
+        # Parse variable header and payload
+        # Ping packets - no variable header and no payload
+        if packet['type'] in [PINGREQ, PINGRESP]: pass
+        # Publish packet
+        if packet['type'] == PUBLISH: read_pub_packet(packet, stream)
+        # Subscription packets
+        elif packet['type'] in [SUBSCRIBE, SUBACK, UNSUBSCRIBE, UNSUBACK]: read_sub_packet(packet, stream)
+        # Connection packet
+        elif packet['type'] == CONNECT: read_connect_packet(packet, stream)
+        # Connection acknowledge, publish handshake (QoS > 0), authenticate
+        # and disconnect packets - no payload 
+        else: 
+            if packet['type'] == CONNACK:
                 packet['session_present'], reserved = stream.get_connack_flags()
-                if reserved != 0:
-                    raise MalformedPacketError("Bytes 1-7 reserved")
-            if packet_type in [PUBACK, PUBREC, PUBREL, PUBCOMP]:
-                packet['id'] = stream.get_int()
+                if reserved != 0: raise MalformedPacketError("Bytes 1-7 reserved")
+            if packet['type'] in [PUBACK, PUBREC, PUBREL, PUBCOMP]: packet['id'] = stream.get_int()
             packet['code'] = stream.get_byte()
             packet['properties'] = get_properties(stream, packet['type'])
+
+
+        logging.info(f"Received {packet['type']} packet type")
     except (MalformedPacketError,
             stream_module.PropertiesError,
             stream_module.MalformedVariableIntegerError,

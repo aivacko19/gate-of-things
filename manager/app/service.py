@@ -1,11 +1,11 @@
 
-import amqp_helper
+import abstract_service
 
-class Service(amqp_helper.AmqpAgent):
+class Service(abstract_service.AbstractService):
 
     def __init__(self, queue, db):
         self.db = db
-        amqp_helper.AmqpAgent.__init__(self, queue)
+        abstract_service.AbstractService.__init__(self, queue)
         self.actions = {
             'verify': self.verify,}
 

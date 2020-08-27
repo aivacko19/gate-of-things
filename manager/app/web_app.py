@@ -2,19 +2,16 @@
 import os
 import json
 import logging
-
-from flask import Flask, render_template, session, redirect, url_for, request
-import requests
-from flask_bootstrap import Bootstrap
 import base64
 
+from flask import Flask, render_template, session, redirect, url_for, request
+from flask_bootstrap import Bootstrap
 import psycopg2
 
+import abstract_service
 import service
 from db import Database
 
-import amqp_helper
-from providers import google as provider
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +23,7 @@ app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 
 env = {
     'QUEUE': None,
-    'OAUTH_URI_SERVICE': None,
+    'OAUTH_SERVICE': None,
     'DEVICE_SERVICE': None,
     'ACCESS_CONTROL_SERVICE': None,
     'SUBSCRIPTION_SERVICE': None,
@@ -51,7 +48,7 @@ if not audit_log_db:
     raise Exception('Environment variable %s not defined', key)
 
 
-my_agent = amqp_helper.AmqpAgent()
+my_agent = abstract_service.AbstractService()
 my_agent.connect()
 
 @app.route("/")
@@ -105,7 +102,7 @@ def login():
         'queue': env['QUEUE'],}
     response = my_agent.rpc(
         obj=my_request,
-        queue=env['OAUTH_URI_SERVICE'],
+        queue=env['OAUTH_SERVICE'],
         correlation_id=str(session['temp_id']))
 
     return redirect(response.get('uri'))

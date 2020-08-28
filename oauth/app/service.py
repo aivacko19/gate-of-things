@@ -20,10 +20,9 @@ class Service(abstract_service.AbstractService):
         authorization_endpoint = provider_cfg["authorization_endpoint"]
 
         # Saving the callback queue, redirect url if redirected, and client id
-        state = {
-            'queue': request.get('queue'),
-            'redirect_url': request.get('redirect_url'),
-            'user_reference': props.correlation_id,}
+        state = {'queue': request.get('queue'),
+                 'redirect_url': request.get('redirect_url'),
+                 'user_reference': props.correlation_id,}
         state_str = json.dumps(state)
 
         request_uri = provider.client.prepare_request_uri(
@@ -32,8 +31,5 @@ class Service(abstract_service.AbstractService):
             scope=["openid", "email", "profile"],
             state=state_str,)
 
-        return {
-            'command': 'oauth_uri',
-            'uri': request_uri
-        }
+        return {'command': 'oauth_uri', 'uri': request_uri}
 

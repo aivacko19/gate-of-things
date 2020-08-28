@@ -132,15 +132,10 @@ class Service(abstract_service.AbstractService):
         code = request.get('code')
         pid = request.get('id')
         pid_in_use = self.db.delete_packet_id(cid, pid)
-
-        if code >= 0x80:
-            return None
-
-        return {
-            'command': 'forward',
-            'type': 'pubcomp',
-            'id': pid,
-            'code': SUCCESS if pid_in_use else PACKET_IDENTIFIER_NOT_FOUND,}
+        if code < 0x80: return {'command': 'forward',
+                                'type': 'pubcomp',
+                                'id': pid,
+                                'code': SUCCESS if pid_in_use else PACKET_IDENTIFIER_NOT_FOUND,}
 
     # Process subscribe request                                             // service.py - Subscription Manager
     def subscribe(self, request, props):

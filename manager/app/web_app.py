@@ -43,8 +43,8 @@ if not dsn:
 db = Database(dsn)
 
 key = 'AUDIT_LOG_DB'
-audit_log_db = os.environ.get(key, None)
-if not audit_log_db:
+AUDIT_LOG_DB = os.environ.get(key, None)
+if not AUDIT_LOG_DB:
     raise Exception('Environment variable %s not defined', key)
 
 
@@ -75,17 +75,11 @@ def index():
 
     if 'devices' not in session:
         # Get names of devices owned
-        my_request = {
-            'command': 'get_owned_resources',
-            'user': session['username'],}
-        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
-
+        response = rpc('ACCESS_CONTROL_SERVICE', {'command': 'get_owned_resources',
+                                                  'user': session['username'],})
         # Get device properties 
-        my_request = {
-            'command': 'get_devices_by_name',
-            'names': response['resources']
-        }
-        response = rpc(my_request, 'DEVICE_SERVICE')
+        response = rpc('DEVICE_SERVICE', {'command': 'get_devices_by_name',
+                                          'names': response['resources'],})
         session['devices'] = response['devices']
 
     devices = session['devices']
@@ -93,17 +87,14 @@ def index():
 
 @app.route("/login/")
 def login():
-    if 'username' in session:
-        return redirect(url_for('index'))
+    if 'username' in session: return redirect(url_for('index'))
 
-    my_request = {
-        'command': 'oauth_request',
-        'redirect_url': request.url_root,
-        'queue': env['QUEUE'],}
-    response = my_agent.rpc(
-        obj=my_request,
-        queue=env['OAUTH_SERVICE'],
-        correlation_id=str(session['temp_id']))
+    my_request = {'command': 'oauth_request',
+                  'redirect_url': request.url_root,
+                  'queue': env['QUEUE'],}
+    response = my_agent.rpc(obj=my_request,
+                            queue=env['OAUTH_SERVICE'],
+                            correlation_id=str(session['temp_id']))
 
     return redirect(response.get('uri'))
 
@@ -131,13 +122,13 @@ def delete_device(device_name):
         'command': 'delete_device',
         'name': device_name
     }
-    response = rpc(my_request, 'DEVICE_SERVICE')
+    response = rpc('DEVICE_SERVICE', my_request)
 
     my_request = {
         'command': 'delete_resource',
         'resource': device_name
     }
-    response = publish(my_request, 'ACCESS_CONTROL_SERVICE')
+    response = publish('ACCESS_CONTROL_SERVICE', my_request)
 
     del session['devices'][device_name]
 
@@ -162,76 +153,35 @@ def change_key(device_name):
         'name': device_name,
         'key': new_key
     }
-    response = rpc(my_request, 'DEVICE_SERVICE')
+    response = rpc('DEVICE_SERVICE', my_request)
 
     session['devices'][device_name]['key'] = new_key
 
     return render_template('details.html', device=device)
 
 
-
+# Registering new device                                                        // web_app.py
 @app.route("/new/", methods=['POST', 'GET'])
 def new_device():
-    if 'username' not in session:
-        return redirect(url_for('index'))
+    if 'username' not in session: return redirect(url_for('index'))
+    if request.method == "GET": return render_template('new_device.html')
 
-    if request.method == "GET":
-        return render_template('new_device.html')
+    name, key, error_name, error_key = request.form['name'], request.form['key'], False, False
+    device = {'name': name, 'key': key,}
 
-    name = request.form['name']
-    key = request.form['key']
+    response = rpc('DEVICE_SERVICE', {'command': 'get', 'name': name})
+    if response.get('device'): error_name = True
+    if len(base64.b64decode(key)) != 32: error_key = True
+    if error_name or error_key: 
+        return render_template('new_device.html', error_key=error_key, error_name=error_name)
 
-    error_name = False
-    error_key = False
-
-    my_request = {
-        'command': 'get',
-        'name': name
-    }
-    response = rpc(my_request, 'DEVICE_SERVICE')
-    device = response.get('device')
-
-    if device is not None:
-        error_name = True
-
-    decoded_key = base64.b64decode(key)
-    if len(decoded_key) != 32:
-        error_key = True
-
-    if error_name or error_key:
-        return render_template('new_device.html', device=device, 
-            error_key=error_key, error_name=error_name)
-
-    my_request = {
-        'command': 'add',
-        'name': name,
-        'owner': session['username'],
-        'key': key
-    }
-    response = rpc(my_request, 'DEVICE_SERVICE')
-
-    device = {
-        'id': response['id'],
-        'name': name,
-        'owner': session['username'],
-        'key': key
-    }
-
+    response = rpc('DEVICE_SERVICE', {'command': 'add', 'device': device})
+    device['id'] = response['id']
     session['devices'][name] = device
-
-    # Grant owner rights for the device
-    response = {
-        'command': 'add_policy',
-        'user': session['username'],
-        'resource': name,
-        'read': True,
-        'write': True,
-        'own': True,
-    }
-    publish(response, 'ACCESS_CONTROL_SERVICE')
-
-    LOGGER.info(session['devices'])
-
+    publish('ACCESS_CONTROL_SERVICE', {'command': 'add_policy',
+                                       'user': session['username'],
+                                       'resource': name,
+                                       'read': True, 'write': True, 'own': True,})
     return render_template('details.html', device=device)
 
 @app.route("/<device_name>/policies/")
@@ -245,7 +195,7 @@ def policies(device_name):
             'command': 'get_resource',
             'resource': device_name
         }
-        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+        response = rpc('ACCESS_CONTROL_SERVICE', my_request)
         policies = response.get('policies')
 
         # for user, policy in policies.items():
@@ -285,7 +235,7 @@ def delete_policy(device_name, user):
             'command': 'get_resource',
             'resource': device_name
         }
-        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+        response = rpc('ACCESS_CONTROL_SERVICE', my_request)
         session['devices'][device_name]['policies'] = response.get('policies')
 
     policies = session['devices'][device_name]['policies']
@@ -300,7 +250,7 @@ def delete_policy(device_name, user):
                 'resource': device_name,
                 'user': user
             }
-            publish(my_request, 'ACCESS_CONTROL_SERVICE')
+            publish('ACCESS_CONTROL_SERVICE', my_request)
 
     return redirect(url_for('policies', device_name=device_name))
 
@@ -315,7 +265,7 @@ def new_policy(device_name):
             'command': 'get_resource',
             'resource': device_name
         }
-        response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+        response = rpc('ACCESS_CONTROL_SERVICE', my_request)
         session['devices'][device_name]['policies'] = response.get('policies')
 
     policies = session['devices'][device_name]['policies']
@@ -342,7 +292,7 @@ def new_policy(device_name):
         'own': own,
         'access_time': access_time,
     }
-    publish(my_request, "ACCESS_CONTROL_SERVICE")
+    publish("ACCESS_CONTROL_SERVICE", my_request)
 
     session['devices'][device_name]['policies'][user] = {
         'user': user,
@@ -366,7 +316,7 @@ def subscriptions(device_name):
         'command': 'get_subscriptions',
         'topic': topic,
     }
-    response = rpc(my_request, "SUBSCRIPTION_SERVICE")
+    response = rpc("SUBSCRIPTION_SERVICE", my_request)
     subscriptions = response['subscriptions']
 
     return render_template('subscriptions.html', device=device, subscriptions=subscriptions)
@@ -384,40 +334,32 @@ def delete_subscription(device_name, user):
         'topic': topic,
         'email': user
     }
-    response = rpc(my_request, "SUBSCRIPTION_SERVICE")
+    response = rpc("SUBSCRIPTION_SERVICE", my_request)
 
     return redirect(url_for('subscriptions', device_name=device_name))
 
+# Retrieving logs from Audit Log DB                        // web_app.py
 @app.route('/<device_name>/log')
 def log(device_name):
     device = get_device(device_name)
-    if device is None:
-        return redirect(url_for('index'))
+    if device is None: return redirect(url_for('index'))
 
     page = int(request.args.get('page', '1'))
-
-    limit = PAGE_SIZE
     offset = (page - 1) * PAGE_SIZE
-
     user = session['username'].replace('@', '_at_').replace('.', '_dot_')
-    dsn = 'postgres://%s:123@%s' % (user, audit_log_db)
+    dsn = 'postgres://%s:123@%s' % (user, AUDIT_LOG_DB)
     query = 'SELECT * FROM get_audit_logs(%s, %s, %s)'
 
     logs = list()
-    with psycopg2.connect(dsn) as conn:
-        conn.autocommit = True
-        cursor = conn.cursor()
-        cursor.execute(query, (device_name, limit, offset))
-        result = cursor.fetchall()
-        LOGGER.info(result)
-        for row in result:
-            log = {
-                'user': row[0],
-                'action': row[1],
-                'success': row[2],
-                'access_time': row[3]
-            }
-            logs.append(log)
+    with psycopg2.connect(dsn) as connection:
+        connection.autocommit = True
+        cursor = connection.cursor()
+        cursor.execute(query, (device_name, PAGE_SIZE, offset))
+        for row in cursor.fetchall():
+            logs.append({'user': row[0],
+                         'action': row[1],
+                         'success': row[2],
+                         'access_time': row[3]})
 
     return render_template('log.html', device=device, logs=logs)
 
@@ -432,7 +374,7 @@ def get_device(device_name):
         'command': 'get_own_access',
         'user': username,
         'resource': device_name}
-    response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
+    response = rpc('ACCESS_CONTROL_SERVICE', my_request)
     if not response['own_access']:
         return None
 
@@ -442,12 +384,12 @@ def get_device(device_name):
 
     return devices[device_name]
 
-def rpc(request, service):
+def rpc(service, request):
     return my_agent.rpc(
         obj=request,
         queue=env[service])
 
-def publish(request, service):
+def publish(service, request):
     return my_agent.publish(
         obj=request,
         queue=env[service])

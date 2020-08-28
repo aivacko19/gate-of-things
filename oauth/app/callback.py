@@ -29,10 +29,7 @@ def index():
         authorization_response=flask.request.url,
         redirect_url=flask.request.base_url,
         code=code,)
-    token_response = requests.post(
-        token_url,
-        headers=headers,
-        data=body,
+    token_response = requests.post(token_url, headers=headers, data=body,
         auth=(provider.CLIENT_ID, provider.CLIENT_SECRET),)
     provider.client.parse_request_body_response(json.dumps(token_response.json()))
 
@@ -40,6 +37,7 @@ def index():
     userinfo_endpoint = provider_cfg["userinfo_endpoint"]
     uri, headers, body = provider.client.add_token(userinfo_endpoint)
     userinfo = requests.get(uri, headers=headers, data=body).json()
+
     email_verified = userinfo.get('email_verified')
     email = userinfo.get('email')
 
@@ -50,16 +48,13 @@ def index():
         if state.get('redirect_url'):
             response = flask.redirect(state.get('redirect_url'))
         else:
-            response = (
-                "<p>You logged in! You're a Legend! Email: {}</p>"
-                "<p>Check your MQTT Connection</p>".format(email))
+            response = ("<p>You logged in! You're a Legend! Email: {}</p>"
+                        "<p>Check your MQTT Connection</p>".format(email))
 
-    request = {
-        'command': 'verify',
-        'email': email if email_verified else None}
-    my_agent.publish(
-        obj=request, 
-        queue=state.get('queue'), 
-        correlation_id=state.get('user_reference'),)
+    request = {'command': 'verify',
+               'email': email if email_verified else None}
+    my_agent.publish(obj=request, 
+                     queue=state.get('queue'), 
+                     correlation_id=state.get('user_reference'),)
 
     return response

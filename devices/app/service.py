@@ -101,7 +101,7 @@ class Service(abstract_service.AbstractService):
             LOGGER.info("Wrong token format")
             return response
 
-        # Extracting fields from the token           // service.py - Device Registry
+        # Extracting fields from token           // service.py - Device Registry
         signature = rawtoken.get('sig')
         expiry = rawtoken.get('se')
         policy = rawtoken.get('skn')
@@ -122,10 +122,10 @@ class Service(abstract_service.AbstractService):
         # Ed25519 algorithm
         if policy == 'ed25519':
             try:
-                # Exctract the public key from Base64 encoding for Ed25519 algorithm
+                # Exctract public key from Base64 encoding for Ed25519 algorithm
                 public_key = nacl.signing.VerifyKey(b64_public_key, 
                     encoder=nacl.encoding.URLSafeBase64Encoder)
-                # Verify the signature using the 
+                # Verify signature using transformed public key and message
                 public_key.verify(message.encode('utf-8'), b64decode(signature))
             except nacl.exceptions.BadSignatureError:
                 LOGGER.info('Bad Signature')
@@ -186,9 +186,10 @@ class Service(abstract_service.AbstractService):
 
     # Add a new device to the registry
     def add(self, request, props):
-        name = request.get('name')
-        owner = request.get('owner')
-        key = request.get('key')
+        device = request.get('device')
+        name = device.get('name')
+        owner = device.get('owner', 'owner')
+        key = device.get('key')
         result = self.db.insert(name, owner, key)
         return {'id': result}
 

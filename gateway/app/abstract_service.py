@@ -33,6 +33,8 @@ CONNECTION_PARAMETERS = pika.ConnectionParameters(
     retry_delay=5,
     heartbeat=0,)
 
+RPC_TIMEOUT_IN_SECONDS = 4
+
 class AbstractService(threading.Thread):
 
     def __init__(self, queue=None):
@@ -48,160 +50,152 @@ class AbstractService(threading.Thread):
         self.actions = {}
         threading.Thread.__init__(self)
 
+    # Connect to AMQT server                         // abstract_service.py
     def connect(self):
+
+        # Establish connection
         self._connection = pika.BlockingConnection(CONNECTION_PARAMETERS)
         self._channel = self._connection.channel()
 
         if self._queue:
+            # Declare shared service queue
             self._channel.queue_declare(queue=self._queue)
         else:
+            # Declare exclusive anonymous queue
             result = self._channel.queue_declare(queue='', exclusive=True)
             self._queue = result.method.queue
-
         LOGGER.info('Connected to AMQT Server. Queue name: %s', self._queue)
+
+        # Enable publishing 
         self._lock.release()
 
+    # Receiving requests manually
     def consume(self, blocking=True):
-        obj_bin = None
-        props = None
+        method, properties, body = None, None, None
+
         if blocking:
-            for method, properties, body in self._channel.consume(self._queue):
-                obj_bin = body
-                props = properties
+            for methodB, propertiesB, bodyB in self._channel.consume(self._queue):
+                method = methodB
+                properties = propertiesB
+                body = bodyB
                 break
         else:
             method, properties, body = self._channel.basic_get(self._queue)
-            obj_bin = body
-            props = properties
 
-        if not obj_bin: return None, None
+        if not body: return None, None
 
-        obj_str = obj_bin.decode('utf-8')
-        obj = json.loads(obj_str, object_hook=as_bytes)
-        return obj, props.correlation_id
+        # Decode request
+        request_string = body.decode('utf-8')
+        request = json.loads(request_string, object_hook=as_bytes)
+        return request, properties.correlation_id
 
+    # Overriding thread method run() executing when thread starts                       // abstract_service.py
     def run(self):
 
-        self._is_active = True
+        # Connect to AMQP server
         self.connect()
 
-        for method, properties, body in self._channel.consume(self._queue, 
-                                                              inactivity_timeout=10):
-            
-            if not (method or properties or body): 
-                if self._closing: 
-                    self._channel.cancel()
-                    break
-                
-                continue
+        # Get request from AMQP queue, blocking with 10s timeout
+        for method, properties, body in self._channel.consume(self._queue, inactivity_timeout=10):
 
-            request_string = body.decode('utf-8')
-            request = json.loads(request_string, object_hook=as_bytes)
-            LOGGER.info('Received message: %s', request_string)
+            # Process request if arrived
+            if bool(method or properties or body):
 
-            if 'command' not in request:
-                continue
-            command = request.get('command')
-            del request['command']
-            LOGGER.info('Command: %s', command)
+                # Decode request
+                request_string = body.decode('utf-8')
+                request = json.loads(request_string, object_hook=as_bytes)
+                LOGGER.info('Received request: %s', request_string)
 
-            action = self.actions.get(command, None)
-            if not action:
-                continue
+                # Extract command from request, get service action from self.actions (overriden by child class)
+                command = request.get('command')
+                action = self.actions.get(command)
+                if not action: continue
+                del request['command']
 
-            try:
-                self.prepare_action(request, properties)
-                response = action(request, properties)
-                self.reply_to_sender(response, properties)
-            except Exception as e:
-                LOGGER.error(traceback.format_exc())
+                # Executing actions safely, methods defined by child class
+                try:
+                    self.prepare_action(request, properties)
+                    response = action(request, properties)
+                    self.reply_to_sender(response, properties)
+                except Exception as e:
+                    LOGGER.error(traceback.format_exc())
 
-            self._channel.basic_ack(method.delivery_tag)
+                # Sending message acknowledgement to RabbitMQ server
+                self._channel.basic_ack(method.delivery_tag)
 
-            if self._closing: break
+            # Cancel connection and stop thread if interrupted
+            if self._closing: 
+                self._channel.cancel()
+                break
          
-    def publish(self, obj, queue, correlation_id=None):
+    # Publish request to service queue                         // abstract_service.py
+    def publish(self, request, queue, correlation_id=None, reply_queue=None):
+        if self.dummy_messenger:
+            self.dummy_messenger.publish(request, queue, correlation_id)
+            return
 
+        # Block if not connected to AMQP server
         self._lock.acquire()
         self._lock.release()
 
-        obj_str = json.dumps(obj, cls=BytesEncoder)
-        body = obj_str.encode('utf-8')
-
-        LOGGER.info('Publishing on queue: %s, message: %s', queue, obj_str)
-
+        # Prepare request
+        request_string = json.dumps(request, cls=BytesEncoder)
+        body = request_string.encode('utf-8')
         properties = pika.BasicProperties(
             content_type='text/json', 
-            reply_to=self._queue,
+            reply_to=reply_queue or self._queue,
             correlation_id=correlation_id,)
+        LOGGER.info('Publishing on queue: %s, request: %s', queue, request_string)
 
-        publish_method = functools.partial(
-            self._channel.basic_publish,
+        # Create method object from RabbitMQ basic publish with ready parameters
+        publish_method = functools.partial(self._channel.basic_publish,
             exchange='',
             routing_key=queue,
             body=body,
             properties=properties)
 
         if self.is_alive() and threading.currentThread().getName() != self.getName():
+            # Execute method from another thread
             self._connection.add_callback_threadsafe(publish_method)
         else:
+            # Execute method directly
             publish_method()
 
-    def rpc(self, obj, queue, correlation_id=None):
+    # Remote procedure call to service                   // abstract_service.py
+    def rpc(self, request, queue, correlation_id=None):
+        if self.dummy_messenger:
+            return self.dummy_messenger.rpc(request, queue, correlation_id)
+
+        # Creating a temporary queue for receiving result of request
         result = self._channel.queue_declare(queue='', exclusive=True)
         temp_queue = result.method.queue
 
-        self._lock.acquire()
-        self._lock.release()
+        # Publish request to service with temporary queue to respond to 
+        self.publish(request, queue, correlation_id, temp_queue)
 
-        obj_str = json.dumps(obj, cls=BytesEncoder)
-        body = obj_str.encode('utf-8')
-
-        LOGGER.info('Publishing on queue: %s, message: %s', queue, obj_str)
-
-        properties = pika.BasicProperties(
-            content_type='text/json', 
-            reply_to=temp_queue,
-            correlation_id=correlation_id,)
-
-        publish_method = functools.partial(
-            self._channel.basic_publish,
-            exchange='',
-            routing_key=queue,
-            body=body,
-            properties=properties)
-
-        if self.is_alive() and threading.currentThread().getName() != self.getName():
-            self._connection.add_callback_threadsafe(publish_method)
-        else:
-            publish_method()
-
+        # Poll temporary queue for response until timeout expires
         body = None
-
-        for i in range(20):
+        for i in range(RPC_TIMEOUT_IN_SECONDS * 5):
             time.sleep(0.2)
             method, properties, body = self._channel.basic_get(temp_queue)
-            if body:
-                break
+            if body: break
         if not body:
             raise Exception("Timeout expired. Service %s not available" % queue)
 
-        obj_str = body.decode('utf-8')
-        obj = json.loads(obj_str, object_hook=as_bytes)
-
-        LOGGER.info('Received message: %s', obj_str)
-
-        return obj
+        # Decode response
+        response_string = body.decode('utf-8')
+        response = json.loads(response_string, object_hook=as_bytes)
+        LOGGER.info('Received request: %s', response_string)
+        return response
 
     def prepare_action(self, request, properties):
         pass
 
     def reply_to_sender(self, response, properties):
         if response:
-            self.publish(
-                obj=response, 
-                queue=properties.reply_to, 
-                correlation_id=properties.correlation_id,)
-
+            self.publish(request=response, 
+                         queue=properties.reply_to, 
+                         correlation_id=properties.correlation_id,)
+ 
     def close(self):
         self._closing = True

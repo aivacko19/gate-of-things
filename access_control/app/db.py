@@ -55,6 +55,7 @@ UPDATE = """
     SET read = %s
     AND write = %s
     AND own = %s
+    AND access_time = %s
     WHERE user_id = %s
     AND resource = %s
 """
@@ -84,7 +85,7 @@ class Database:
         result = cursor.fetchone()
 
         if result:
-            return self.update(user, resource, read, write, own,)
+            return self.update(user, resource, read, write, own,, access_time)
         
         cursor.execute(INSERT, (user, resource, read, write, own, access_time))
         return cursor.rowcount > 0
@@ -132,9 +133,9 @@ class Database:
             return False
         return result[OWN_INDEX]
 
-    def update(self, user, resource, read=False, write=False, own=False):
+    def update(self, user, resource, read=False, write=False, own=False, access_time=0):
         cursor = self.connection.cursor()
-        cursor.execute(UPDATE, (read, write, own, user, resource,))
+        cursor.execute(UPDATE, (read, write, own, access_time, user, resource,))
 
         return cursor.rowcount > 0
 

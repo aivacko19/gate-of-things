@@ -14,13 +14,13 @@ LOGGER = logging.getLogger(__name__)
 
 class Service(abstract_service.AbstractService):
 
-    def __init__(self, queue, db):
+    def __init__(self, queue, db, dummy_messenger=None):
         self.db = db
+        self.dummy_messenger = dummy_messenger
         abstract_service.AbstractService.__init__(self, queue)
-        self.actions = {
-            'log': self.log,
-            'add_ownership': self.add_ownership,
-            'remove_ownership': self.remove_ownership,}
+        self.actions = {'log': self.log,
+                        'add_ownership': self.add_ownership,
+                        'remove_ownership': self.remove_ownership,}
 
     # Log an access attempt
     def log(self, request, props):

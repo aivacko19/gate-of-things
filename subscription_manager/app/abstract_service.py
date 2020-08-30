@@ -131,7 +131,7 @@ class AbstractService(threading.Thread):
     # Publish request to service queue                         // abstract_service.py
     def publish(self, request, queue, correlation_id=None, reply_queue=None):
         if self.dummy_messenger:
-            self.dummy_messenger.publish(request, queue, correlation_id)
+            self.dummy_messenger.publish(obj, queue, correlation_id)
             return
 
         # Block if not connected to AMQP server
@@ -164,7 +164,7 @@ class AbstractService(threading.Thread):
     # Remote procedure call to service                   // abstract_service.py
     def rpc(self, request, queue, correlation_id=None):
         if self.dummy_messenger:
-            return self.dummy_messenger.rpc(request, queue, correlation_id)
+            return self.dummy_messenger.rpc(obj, queue, correlation_id)
 
         # Creating a temporary queue for receiving result of request
         result = self._channel.queue_declare(queue='', exclusive=True)
@@ -193,9 +193,10 @@ class AbstractService(threading.Thread):
 
     def reply_to_sender(self, response, properties):
         if response:
-            self.publish(request=response, 
-                         queue=properties.reply_to, 
-                         correlation_id=properties.correlation_id,)
- 
+            self.publish(
+                obj=response, 
+                queue=properties.reply_to, 
+                correlation_id=properties.correlation_id,)
+
     def close(self):
         self._closing = True

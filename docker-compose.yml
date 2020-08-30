@@ -14,7 +14,7 @@ services:
     depends_on:
       - "rabbitmq"
   router:
-    build: ./router
+    build: ./request_router
     volumes:
       - ./router:/usr/src/app
     environment:
@@ -29,7 +29,7 @@ services:
       - "rabbitmq"
       - "conn_db"
   oauth:
-    build: ./oauth
+    build: ./oauth_interface
     ports:
       - "55000:5000"
     volumes:
@@ -41,7 +41,7 @@ services:
     depends_on:
       - "rabbitmq"
   subscriptions:
-    build: ./subscriptions
+    build: ./subscription_manager
     volumes:
       - ./subscriptions:/usr/src/app
     environment:
@@ -55,7 +55,7 @@ services:
       - "rabbitmq"
       - "conn_db"
   messages:
-    build: ./messages
+    build: ./message_delivery
     volumes:
       - ./messages:/usr/src/app
     environment:
@@ -79,7 +79,7 @@ services:
       - "rabbitmq"
       - "conn_db"
   devices:
-    build: ./devices
+    build: ./device_registry
     volumes:
       - ./devices:/usr/src/app
     environment:
@@ -101,7 +101,7 @@ services:
       - "rabbitmq"
       - "log_db"
   manager:
-    build: ./manager
+    build: ./administrator
     ports:
       - "5000:5000"
     volumes:

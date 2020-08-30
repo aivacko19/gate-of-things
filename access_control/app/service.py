@@ -2,7 +2,7 @@
 import os
 import logging
 
-import abstract_service
+from . import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 
@@ -18,9 +18,10 @@ for key in env:
 
 class Service(abstract_service.AbstractService):
 
-    def __init__(self, queue, db):
+    def __init__(self, queue, db, dummy_messenger=None):
         self.db = db
         abstract_service.AbstractService.__init__(self, queue)
+        self.dummy_messenger = dummy_messenger
         self.actions = {
             'add_policy': self.add_policy,
             'update_policy': self.update_policy,
@@ -53,7 +54,7 @@ class Service(abstract_service.AbstractService):
                 'resource': resource,}
             logger_message['command'] = 'add_ownership' if own else 'remove_ownership'
             self.publish(
-                obj=logger_message,
+                request=logger_message,
                 queue=env['LOGGER_SERVICE'],)
 
     # Update a policy 
@@ -76,7 +77,7 @@ class Service(abstract_service.AbstractService):
                 'resource': resource,}
             logger_message['command'] = 'add_ownership' if own else 'remove_ownership'
             self.publish(
-                obj=logger_message,
+                request=logger_message,
                 queue=env['LOGGER_SERVICE'],)
 
     # Delete policy 
@@ -96,22 +97,22 @@ class Service(abstract_service.AbstractService):
                 'owner': user,
                 'resource': resource,}
             self.publish(
-                obj=logger_message,
+                request=logger_message,
                 queue=env['LOGGER_SERVICE'],)
 
     # Delete all policies for one resource
     def delete_resource(self, request, props):
         resource = request.get('resource')
         policies = self.db.get_resource(resource)
-        for policy in policies.values():
+        for user, policy in policies.items():
             LOGGER.info(policy)
-            if policy['own']:
+            if policy.get('own'):
                 logger_message = {
                     'command': 'remove_ownership',
-                    'owner': policy['user'],
+                    'owner': user,
                     'resource': resource,}
                 self.publish(
-                    obj=logger_message,
+                    request=logger_message,
                     queue=env['LOGGER_SERVICE'],)
         self.db.delete_resource(resource)
 

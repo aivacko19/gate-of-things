@@ -16,11 +16,11 @@ for key in env:
 
 class InboxService(abstract_service.AbstractService):
 
-    def __init__(self):
+    def __init__(self, dummy_messenger=None):
         self.inbox = queue.Queue()
+        self.dummy_messenger = dummy_messenger
         abstract_service.AbstractService.__init__(self)
-        self.actions = {
-            'receive_package': self.receive_package}
+        self.actions = {'receive_package': self.receive_package}
         
     def receive_package(self, request, props):
         state = request['state']
@@ -34,11 +34,11 @@ class InboxService(abstract_service.AbstractService):
 
     def publish_request(self, pakcet, file_descriptor):
         packet['command'] = 'process'
-        self.publish(obj=packet,
+        self.publish(request=packet,
                      queue=env['ROUTING_SERVICE'],
                      correlation_id=str(file_descriptor))
 
     def publish_disconnect(self, file_descriptor):
-        self.publish(obj={'command': 'disconnect'},
+        self.publish(request={'command': 'disconnect'},
                      queue=env['ROUTING_SERVICE'],
                      correlation_id=str(file_descriptor))

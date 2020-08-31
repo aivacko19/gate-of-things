@@ -93,10 +93,6 @@ class Database:
         cursor = self.connection.cursor()
         cursor.execute(SELECT_OWNER, (owner,))
         result = cursor.fetchall()
-
-        if not result:
-            return {}
-
         devices = {}
         for row in result:
             device = {

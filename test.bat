@@ -15,7 +15,8 @@ for %%a in (access_control^
 	echo.
 	echo ################## %%a service ##################
 	echo.
-	python -m unittest discover
+	rem python -m unittest discover
+	pytest
 	@echo off
 	cd ..
 )

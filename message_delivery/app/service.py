@@ -3,7 +3,7 @@ import os
 import time
 import logging
 
-import abstract_service
+from . import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 

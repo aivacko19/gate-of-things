@@ -29,6 +29,7 @@ db = Database(dsn)
 service = Service(queue, db)
 service.start()
 
+web_app.init(db, service)
 app.run(host=host, ssl_context=('cert.pem', 'key.pem'))
 
 try:

@@ -8,7 +8,7 @@ import nacl.encoding
 import nacl.signing
 import nacl.exceptions
 
-import abstract_service
+from . import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 

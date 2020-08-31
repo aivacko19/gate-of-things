@@ -3,7 +3,7 @@ import os
 import logging
 import time
 
-import abstract_service
+from . import abstract_service
 
 SUCCESS = 0X00
 CONTINUE_AUTHENTICATION = 0x18
@@ -135,7 +135,7 @@ class Service(abstract_service.AbstractService):
                 return {'state': 'disconnect', 'type': 'disconnect', 'code': BAD_AUTHENTICATION_METHOD,}
         # Ping
         elif packet_type == 'pingreq':
-            return {'state': 'read': 'type': 'pingresp'}
+            return {'state': 'read', 'type': 'pingresp'}
         else:
             return {'state': 'disconnect', 'type': 'disconnect', 'code': PROTOCOL_ERROR}
 

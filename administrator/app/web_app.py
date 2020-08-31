@@ -40,7 +40,10 @@ dsn = os.environ.get(key, None)
 if not dsn:
     raise Exception('Environment variable %s not defined', key)
 
-db = Database(dsn)
+# db = Database(dsn)
+# my_agent = abstract_service.AbstractService()
+# my_agent.connect()
+
 
 key = 'AUDIT_LOG_DB'
 AUDIT_LOG_DB = os.environ.get(key, None)
@@ -48,8 +51,16 @@ if not AUDIT_LOG_DB:
     raise Exception('Environment variable %s not defined', key)
 
 
-my_agent = abstract_service.AbstractService()
-my_agent.connect()
+class Util:
+    def __init__(self, db, my_agent):
+        self.db = db
+        self.my_agent = my_agent
+
+util = None
+
+def init(db, my_agent):
+    util = Util(db, my_agent)
+
 
 @app.route("/")
 def index():
@@ -197,26 +208,6 @@ def policies(device_name):
         }
         response = rpc('ACCESS_CONTROL_SERVICE', my_request)
         policies = response.get('policies')
-
-        # for user, policy in policies.items():
-        #     if not policy['read']:
-        #         del policies[user]
-        #     policy['write'] = False
-        # my_request = {
-        #     'command': 'get_resource',
-        #     'resource': resource + '/ctrl'
-        # }
-        # response = rpc(my_request, 'ACCESS_CONTROL_SERVICE')
-        # write_policies = response.get('policies')
-        # for user, policy in write_policies.items():
-        #     if not policy['write']:
-        #         continue
-        #     if user in policies:
-        #         policies[user]['write'] = True
-        #     else:
-        #         policy['read'] = False
-        #         policy['access_time'] = 0
-        #         policies[user] = policy
 
         session['devices'][device_name]['policies'] = policies
 
@@ -393,7 +384,3 @@ def publish(service, request):
     return my_agent.publish(
         request=request,
         queue=env[service])
-
-
-
-

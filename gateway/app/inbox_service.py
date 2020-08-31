@@ -2,7 +2,7 @@
 import os
 import queue
 
-import abstract_service
+from . import abstract_service
 
 env = {
     'ROUTING_SERVICE': None

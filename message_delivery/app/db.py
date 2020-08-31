@@ -18,6 +18,11 @@ def as_bytes(dct):
         return base64.b64decode(dct['__value__'].encode('utf-8'))
     return dct
 
+CID_INDEX = 0
+PID_INDEX = 1
+TIME_RECEIVED_INDEX = 2
+RECEIVED_INDEX = 3
+MESSAGE_INDEX = 4
 
 CREATE_TABLE = """
     CREATE TABLE IF NOT EXISTS quota(
@@ -117,7 +122,7 @@ class Database:
         if not result:
             return None
 
-        return json.loads(result[4], object_hook=as_bytes), result[2]
+        return json.loads(result[MESSAGE_INDEX], object_hook=as_bytes), result[TIME_RECEIVED_INDEX]
 
     def delete(self, cid, pid):
         cursor = self.connection.cursor()

@@ -5,6 +5,14 @@ import random
 
 CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+ID_INDEX = 0
+RANDOM_ID_INDEX = 1
+SOCKET_INDEX = 2
+REPLY_QUEUE_INDEX = 3
+CLEAN_START_INDEX = 4
+METHOD_INDEX = 5
+EMAIL_INDEX = 6
+
 CREATE_TABLE = """
     CREATE TABLE IF NOT EXISTS connection (
         id VARCHAR(23) PRIMARY KEY,
@@ -104,13 +112,13 @@ class Database:
 class Connection:
 
     def __init__(self, db_row):
-        self.id = db_row[0]
-        self.random_id = db_row[1]
-        self.socket = db_row[2]
-        self.reply_queue = db_row[3]
-        self.clean_start = db_row[4]
-        self.method = db_row[5]
-        self.email = db_row[6]
+        self.id = db_row[ID_INDEX]
+        self.random_id = db_row[RANDOM_ID_INDEX]
+        self.socket = db_row[SOCKET_INDEX]
+        self.reply_queue = db_row[REPLY_QUEUE_INDEX]
+        self.clean_start = db_row[CLEAN_START_INDEX]
+        self.method = db_row[METHOD_INDEX]
+        self.email = db_row[EMAIL_INDEX]
 
     def connected(self):
         return self.id is not None

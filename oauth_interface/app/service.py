@@ -1,6 +1,6 @@
 
 from providers import google as provider 
-import abstract_service
+from . import abstract_service
 import json
 
 CONTINUE_AUTHENTICATION = 0x18

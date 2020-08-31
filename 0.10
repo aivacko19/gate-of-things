@@ -1,0 +1,37 @@
+Requirement already satisfied: flask in c:\python36-32\lib\site-packages (1.1.1)
+Collecting flask-appconfig
+  Downloading flask-appconfig-0.11.1.tar.gz (12 kB)
+Collecting flask-bootstrap
+  Downloading Flask-Bootstrap-3.3.7.1.tar.gz (456 kB)
+Collecting flask-nav
+  Downloading flask-nav-0.6.tar.gz (5.4 kB)
+Collecting flask-debug
+  Downloading Flask-Debug-0.4.3.tar.gz (5.9 kB)
+Collecting flask-wtf
+  Downloading Flask_WTF-0.14.3-py2.py3-none-any.whl (13 kB)
+Requirement already satisfied: itsdangerous>=0.24 in c:\python36-32\lib\site-packages (from flask) (1.1.0)
+Requirement already satisfied: click>=5.1 in c:\python36-32\lib\site-packages (from flask) (7.1.1)
+Requirement already satisfied: Jinja2>=2.10.1 in c:\python36-32\lib\site-packages (from flask) (2.11.1)
+Requirement already satisfied: Werkzeug>=0.15 in c:\python36-32\lib\site-packages (from flask) (1.0.0)
+Requirement already satisfied: six in c:\users\aleksa\appdata\roaming\python\python36\site-packages (from flask-appconfig) (1.11.0)
+Collecting dominate
+  Downloading dominate-2.5.2-py2.py3-none-any.whl (29 kB)
+Collecting visitor
+  Downloading visitor-0.1.3.tar.gz (3.3 kB)
+Collecting inflection
+  Downloading inflection-0.5.1-py2.py3-none-any.whl (9.5 kB)
+Collecting WTForms
+  Downloading WTForms-2.3.3-py2.py3-none-any.whl (169 kB)
+Requirement already satisfied: MarkupSafe>=0.23 in c:\python36-32\lib\site-packages (from Jinja2>=2.10.1->flask) (1.1.1)
+Installing collected packages: flask-appconfig, dominate, visitor, flask-bootstrap, flask-nav, inflection, flask-debug, WTForms, flask-wtf
+    Running setup.py install for flask-appconfig: started
+    Running setup.py install for flask-appconfig: finished with status 'done'
+    Running setup.py install for visitor: started
+    Running setup.py install for visitor: finished with status 'done'
+    Running setup.py install for flask-bootstrap: started
+    Running setup.py install for flask-bootstrap: finished with status 'done'
+    Running setup.py install for flask-nav: started
+    Running setup.py install for flask-nav: finished with status 'done'
+    Running setup.py install for flask-debug: started
+    Running setup.py install for flask-debug: finished with status 'done'
+Successfully installed WTForms-2.3.3 dominate-2.5.2 flask-appconfig-0.11.1 flask-bootstrap-3.3.7.1 flask-debug-0.4.3 flask-nav-0.6 flask-wtf-0.14.3 inflection-0.5.1 visitor-0.1.3

@@ -2,7 +2,7 @@
 import os
 import queue
 
-from . import abstract_service
+import abstract_service
 
 env = {
     'ROUTING_SERVICE': None
@@ -32,7 +32,7 @@ class InboxService(abstract_service.AbstractService):
             return None, None, None
         return self.inbox.get()
 
-    def publish_request(self, pakcet, file_descriptor):
+    def publish_request(self, packet, file_descriptor):
         packet['command'] = 'process'
         self.publish(request=packet,
                      queue=env['ROUTING_SERVICE'],

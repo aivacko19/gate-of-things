@@ -85,7 +85,7 @@ class Database:
         result = cursor.fetchone()
 
         if result:
-            return self.update(user, resource, read, write, own,, access_time)
+            return self.update(user, resource, read, write, own, access_time)
         
         cursor.execute(INSERT, (user, resource, read, write, own, access_time))
         return cursor.rowcount > 0

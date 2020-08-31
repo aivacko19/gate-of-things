@@ -45,6 +45,7 @@ class AbstractService(threading.Thread):
         self._consumer_tag = None
         self._consuming = False
         self._prefetch_count = 1
+        self.dummy_messenger = None
         self._lock = threading.Lock()
         self._lock.acquire()
         self.actions = {}

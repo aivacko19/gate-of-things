@@ -3,7 +3,7 @@ import os
 import time
 import logging
 
-from . import abstract_service
+import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ class Service(abstract_service.AbstractService):
         # Processing multiple topics from request
         for topic in topics:
             topic_filter = topic.get('filter')
-            topic['session_id'], topic['sub_id'] = subscription_identifier, cid
+            topic['session_id'], topic['sub_id'] = cid, subscription_identifier
             LOGGER.info('%s: Subscribing on topic filter %s', cid, topic_filter)
 
             # Checking subscription rights 
@@ -271,7 +271,7 @@ class Service(abstract_service.AbstractService):
         request = {'command': 'get_read_access',
                    'user': email,
                    'resource': topic,}
-        response = self.rpc(obj=request,
+        response = self.rpc(request=request,
                             queue=env['ACCESS_CONTROL_SERVICE'])
         read_access = response.get('read_access')
         if not read_access: return False, 0
@@ -313,7 +313,7 @@ class Service(abstract_service.AbstractService):
         resource = resource[len(DEVICE_PREFIX):]
         if resource.endswith(CONTROL_SUFFIX):
             resource = resource[:len(resource)-len(CONTROL_SUFFIX)]
-        elif email == resource + '@device' and action == 'publish':
+        elif email == resource + '@device' and action in ['publish', 'receive']:
             return
 
         response = {'command': 'log',

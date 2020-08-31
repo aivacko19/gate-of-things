@@ -1,5 +1,5 @@
 
-from . import abstract_service
+import abstract_service
 
 class Service(abstract_service.AbstractService):
 

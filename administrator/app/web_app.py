@@ -40,9 +40,9 @@ dsn = os.environ.get(key, None)
 if not dsn:
     raise Exception('Environment variable %s not defined', key)
 
-# db = Database(dsn)
-# my_agent = abstract_service.AbstractService()
-# my_agent.connect()
+db = Database(dsn)
+my_agent = abstract_service.AbstractService()
+my_agent.connect()
 
 
 key = 'AUDIT_LOG_DB'
@@ -52,15 +52,14 @@ if not AUDIT_LOG_DB:
 
 
 class Util:
-    def __init__(self, db, my_agent):
+    def __init__(self, db, service):
         self.db = db
-        self.my_agent = my_agent
+        self.service = service
 
-util = None
+util = Util(db, my_agent)
 
-def init(db, my_agent):
-    util = Util(db, my_agent)
-
+def init(db, service):
+    util = Util(db, service)
 
 @app.route("/")
 def index():
@@ -69,16 +68,16 @@ def index():
     if 'username' not in session:
         if 'temp_id' not in session:
             # Create temporary id for guest
-            temp_id = db.new()
+            temp_id = util.db.new()
             session['temp_id'] = temp_id
         else:
             # Check if OAuth service verified the user
-            result = db.get(session['temp_id'])
+            result = util.db.get(session['temp_id'])
             username = result.get('username')
             failed_to_login = result.get('failed')
             if username:
                 session['username'] = username
-                db.delete(session['temp_id'])
+                util.db.delete(session['temp_id'])
                 del session['temp_id']
 
     if 'username' not in session:
@@ -100,10 +99,10 @@ def index():
 def login():
     if 'username' in session: return redirect(url_for('index'))
 
-    my_request = {'command': 'oauth_request',
+    my_request = {'command': 'get_uri',
                   'redirect_url': request.url_root,
                   'queue': env['QUEUE'],}
-    response = my_agent.rpc(request=my_request,
+    response = util.service.rpc(request=my_request,
                             queue=env['OAUTH_SERVICE'],
                             correlation_id=str(session['temp_id']))
 
@@ -376,11 +375,11 @@ def get_device(device_name):
     return devices[device_name]
 
 def rpc(service, request):
-    return my_agent.rpc(
+    return util.service.rpc(
         request=request,
         queue=env[service])
 
 def publish(service, request):
-    return my_agent.publish(
+    return util.service.publish(
         request=request,
         queue=env[service])

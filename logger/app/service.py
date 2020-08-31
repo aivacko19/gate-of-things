@@ -1,14 +1,6 @@
-
-import os
-import time
 import logging
-import urllib
-import base64
-import nacl.encoding
-import nacl.signing
-import nacl.exceptions
 
-from . import abstract_service
+import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 

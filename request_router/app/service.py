@@ -3,7 +3,7 @@ import os
 import logging
 import time
 
-from . import abstract_service
+import abstract_service
 
 SUCCESS = 0X00
 CONTINUE_AUTHENTICATION = 0x18
@@ -206,9 +206,9 @@ class Service(abstract_service.AbstractService):
     def redirect(self, target, request, reply=False):
         if not target: return
         if reply:
-            self.rpc(request=request,
-                     queue=env[target],
-                     correlation_id=self.conn.get_id())
+            return self.rpc(request=request,
+                            queue=env[target],
+                            correlation_id=self.conn.get_id())
         else:
             self.publish(request=request,
                          queue=env[target],

@@ -16,7 +16,7 @@ services:
   router:
     build: ./request_router
     volumes:
-      - ./router:/usr/src/app
+      - ./request_router:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
       QUEUE: routing-service
@@ -33,7 +33,7 @@ services:
     ports:
       - "55000:5000"
     volumes:
-      - ./oauth:/usr/src/app
+      - ./oauth_interface:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
       QUEUE: oauth-service
@@ -43,7 +43,7 @@ services:
   subscriptions:
     build: ./subscription_manager
     volumes:
-      - ./subscriptions:/usr/src/app
+      - ./subscription_manager:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
       QUEUE: subscription-service
@@ -57,7 +57,7 @@ services:
   messages:
     build: ./message_delivery
     volumes:
-      - ./messages:/usr/src/app
+      - ./message_delivery:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
       QUEUE: message-service
@@ -81,7 +81,7 @@ services:
   devices:
     build: ./device_registry
     volumes:
-      - ./devices:/usr/src/app
+      - ./device_registry:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
       QUEUE: device-service
@@ -105,7 +105,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./manager:/usr/src/app
+      - ./administrator:/usr/src/app
     environment:
       AMQP_URL: rabbitmq
       QUEUE: manager-service

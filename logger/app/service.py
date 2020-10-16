@@ -1,64 +1,40 @@
-
-import os
-import time
 import logging
-import urllib
-import base64
-import nacl.encoding
-import nacl.signing
-import nacl.exceptions
 
-import amqp_helper
+import abstract_service
 
 LOGGER = logging.getLogger(__name__)
 
-SUCCESS = 0x00
-NO_MATCHING_SUBSCRIPTIONS = 0x10
-NO_SUBSCRIPTION_EXISTED = 0x11
-UNSPECIFIED_ERROR = 0x80
-IMPLEMENTATION_SPECIFIC_ERROR = 0x83
-NOT_AUTHORIZED = 0x87
-TOPIC_FILTER_INVALID = 0x8F
-PACKET_IDENTIFIER_IN_USE = 0x91
-PACKET_IDENTIFIER_NOT_FOUND = 0x93
-QUOTA_EXCEEDED = 0x97
-PAYLOAD_FORMAT_INVALID = 0x99
-SHARED_SUBSCRIPTION_NOT_AVAILABLE = 0x9E
-SUBSCRIPTION_IDENTIFIERS_NOT_AVAILABLE = 0xA1
-WILDCARD_SUBSCRIPTIONS_NOT_AVAILABLE = 0xA2
+class Service(abstract_service.AbstractService):
 
-UTF8_FORMAT = 1
-
-DEVICE_PREFIX = 'device/'
-SHARED_ACCESS_SIGNATURE = 'SharedAccessSignature'
-TOKEN_FIELDS = ['sig', 'se', 'skn', 'sr']
-
-env = {
-    'ACCESS_CONTROL_SERVICE': None
-}
-
-for key in env:
-    service = os.environ.get(key)
-    if not service:
-        raise Exception('Environment variable %s not defined', key)
-    env[key] = service
-
-class Service(amqp_helper.AmqpAgent):
-
-    def __init__(self, queue, db):
+    def __init__(self, queue, db, dummy_messenger=None):
         self.db = db
-        amqp_helper.AmqpAgent.__init__(self, queue)
+        self.dummy_messenger = dummy_messenger
+        abstract_service.AbstractService.__init__(self, queue)
+        self.actions = {'log': self.log,
+                        'add_ownership': self.add_ownership,
+                        'remove_ownership': self.remove_ownership,}
 
-    def main(self, request, props):
-        command = request.get('command')
-        del request['command']
-        response = {}
+    # Log an access attempt
+    def log(self, request, props):
+        user = request.get('user')
+        resource = request.get('resource')
+        action = request.get('action')
+        success_bool = request.get('success', True)
+        success = 'successfull' if success_bool else 'unsuccessful'
+        self.db.insert(user, resource, action, success)
 
-        if command == 'log':
-            user = request.get('user')
-            resource = request.get('resource')
-            action = request.get('action')
-            self.db.insert(user, resource, action)
+    # Add log access
+    def add_ownership(self, request, props):
+        owner = request.get('owner')
+        resource = request.get('resource')
+        self.db.add_ownership(owner, resource)
+
+    # Remove log access
+    def remove_ownership(self, request, props):
+        owner = request.get('owner')
+        resource = request.get('resource')
+        self.db.remove_ownership(owner, resource)
+
 
 
 

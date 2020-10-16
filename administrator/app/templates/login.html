@@ -1,0 +1,25 @@
+{% extends "bootstrap/base.html" %}
+{% block title %}This is an example page{% endblock %}
+
+{% block navbar %}
+<div class="navbar navbar-fixed-top">
+  <!-- ... -->
+</div>
+{% endblock %}
+
+{% block content %}
+	<div class="container">
+		{% if failed %}
+			<div class="row">
+				<div class="col-md-12">
+					<p>Failed to Login! Please try again</p>
+				</div>
+			</div>
+		{% endif %}
+		<div class="jumbotron">
+			<div class='center'>
+				<a href="{{ url_for('login') }}" class="btn btn-primary" role='button'>Login</a>
+			</div>
+		</div>
+	</div>
+{% endblock %}

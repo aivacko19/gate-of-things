@@ -19,13 +19,12 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
 MY_HOSTNAME = os.getenv('HOST', 'localhost')
 
-my_agent = InboxService()
-my_agent.start()
-
-api_gateway = gateway_server.GatewayServer(MY_HOSTNAME, protocol, my_agent)
+inbox = InboxService()
+api_gateway = gateway_server.GatewayServer(MY_HOSTNAME, protocol, inbox)
 try:
+    inbox.start()
     api_gateway.start()
 except Exception as e:
     LOGGER.error(traceback.format_exc())
     api_gateway.close()
-    my_agent.close()
+    inbox.close()

@@ -12,6 +12,8 @@ CREATE_TABLE = """
         resource VARCHAR(40) NOT NULL,
         read BOOLEAN DEFAULT FALSE,
         write BOOLEAN DEFAULT FALSE,
+        own BOOLEAN DEFAULT FALSE,
+        access_time INT DEFAULT 0,
         UNIQUE (user_id, resource)
     );
 """
@@ -21,8 +23,10 @@ USER_INDEX = 1
 RESOURCE_INDEX = 2
 READ_INDEX = 3
 WRITE_INDEX = 4
+OWN_INDEX = 5
+ACCESS_TIME_INDEX = 6
 
-insert_keys = ['user_id', 'resource', 'read', 'write']
+insert_keys = ['user_id', 'resource', 'read', 'write', 'own', 'access_time']
 insert_values = ", ".join(['%s'] * len(insert_keys))
 INSERT = f"""
     INSERT INTO policy ({", ".join(insert_keys)})
@@ -40,10 +44,18 @@ SELECT_RESOURCE = """
     WHERE resource = %s 
 """
 
+SELECT_OWNED = """
+    SELECT * FROM policy
+    WHERE user_id = %s
+    AND own = TRUE
+"""
+
 UPDATE = """
     UPDATE policy
     SET read = %s
     AND write = %s
+    AND own = %s
+    AND access_time = %s
     WHERE user_id = %s
     AND resource = %s
 """
@@ -59,60 +71,51 @@ DELETE_RESOURCE = """
     WHERE resource = %s
 """
 
-class PolicyDB:
+class Database:
 
-    __instance = None
-
-    @staticmethod
-    def getInstance():
-        if not PolicyDB.__instance:
-            DB_NAME = os.environ.get('DB_NAME', 'mydb')
-            DB_USER = os.environ.get('DB_USER', 'root')
-            DB_PASS = os.environ.get('DB_PASS', 'root')
-            DB_HOST = os.environ.get('DB_HOST', '192.168.99.100')
-            SessionDB.__instance = SessionDB(DB_NAME, DB_USER, DB_PASS, DB_HOST)
-
-        return PolicyDB.__instance
-
-    def __init__(self, db_name, db_user, db_password, db_host):
-        self.connection = psycopg2.connect(
-            database=db_name,
-            user=db_user,
-            password=db_password,
-            host=db_host,)
+    def __init__(self, dsn):
+        self.connection = psycopg2.connect(dsn)
         self.connection.autocommit = True
         cursor = self.connection.cursor()
         cursor.execute(CREATE_TABLE)
 
-    def add(self, user, resource, read=False, write=False):
+    def add(self, user, resource, read=False, write=False, own=False, access_time=0):
         cursor = self.connection.cursor()
         cursor.execute(SELECT, (user, resource))
         result = cursor.fetchone()
+
         if result:
-            self.update(user, resource, read, write)
-        else:
-            cursor.execute(INSERT, (user, resource, read, write,))
+            return self.update(user, resource, read, write, own, access_time)
+        
+        cursor.execute(INSERT, (user, resource, read, write, own, access_time))
+        return cursor.rowcount > 0
 
 
     def get_resource(self, resource):
         cursor = self.connection.cursor()
         cursor.execute(SELECT_RESOURCE, (resource,))
-        result = cursor.fetchone()
-        policy = list()
+        result = cursor.fetchall()
+        if not result:
+            return {}
+            
+        policies = {}
         for row in result:
-            policy.append({
+            policy = {
                 'user': row[USER_INDEX],
                 'read': row[READ_INDEX],
-                'write': row[WRITE_INDEX],})
-        return policy
+                'write': row[WRITE_INDEX],
+                'own': row[OWN_INDEX],
+                'access_time': row[ACCESS_TIME_INDEX]}
+            policies[row[USER_INDEX]] = policy
+        return policies
 
     def can_read(self, user, resource):
         cursor = self.connection.cursor()
         cursor.execute(SELECT, (user, resource,))
         result = cursor.fetchone()
         if not result:
-            return False
-        return result[READ_INDEX]
+            return False, 0
+        return result[READ_INDEX], result[ACCESS_TIME_INDEX]
 
     def can_write(self, user, resource):
         cursor = self.connection.cursor()
@@ -122,14 +125,36 @@ class PolicyDB:
             return False
         return result[WRITE_INDEX]
 
-    def update(self, user, resource, read=False, write=False):
+    def owns(self, user, resource):
         cursor = self.connection.cursor()
-        cursor.execute(UPDATE, (read, write, user, resource,))
+        cursor.execute(SELECT, (user, resource,))
+        result = cursor.fetchone()
+        if not result:
+            return False
+        return result[OWN_INDEX]
+
+    def update(self, user, resource, read=False, write=False, own=False, access_time=0):
+        cursor = self.connection.cursor()
+        cursor.execute(UPDATE, (read, write, own, access_time, user, resource,))
+
+        return cursor.rowcount > 0
 
     def delete(self, user, resource):
         cursor = self.connection.cursor()
         cursor.execute(DELETE, (user, resource,))
 
+        return cursor.rowcount > 0
+
     def delete_resource(self, resource):
         cursor = self.connection.cursor()
         cursor.execute(DELETE_RESOURCE, (resource,))
+
+    def get_owned_resources(self, user):
+        cursor = self.connection.cursor()
+        LOGGER.info(SELECT_OWNED, user)
+        cursor.execute(SELECT_OWNED, (user,))
+        result = cursor.fetchall()
+        resources = []
+        for row in result:
+            resources.append(row[RESOURCE_INDEX])
+        return resources

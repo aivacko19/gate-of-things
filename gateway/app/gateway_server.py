@@ -1,30 +1,17 @@
 #!/usr/bin/env python3
 
-import socket
-import selectors
 import logging
-import os
 
 import server
 
 LOGGER = logging.getLogger(__name__)
 
-env = {
-    'ROUTING_SERVICE': None
-}
-
-for key in env:
-    service = os.environ.get(key)
-    if not service:
-        raise Exception('Environment variable %s not defined', key)
-    env[key] = service
-
 class GatewayServer(server.Server):
-    def __init__(self, host, protocol, agent):
+    def __init__(self, host, protocol, mailer):
         self.protocol = protocol
-        self.agent = agent
+        self.mailer = mailer
         self.connections = {}
-        server.Server.__init__(self, host)
+        server.Server.__init__(self, host, protocol.port, protocol.port_safe)
 
     def get_empty_buffer(self):
         return self.protocol.new_stream()
@@ -42,49 +29,32 @@ class GatewayServer(server.Server):
         pass
 
     def on_connect(self, socket):
-        self.put_socket(socket)
+        self.connections[socket.fileno()] = socket
 
     def on_disconnect(self, socket):
-        user_reference = socket.fileno()
-        packet = {'command': 'disconnect'}
-        self.agent.publish(
-            obj=packet,
-            queue=env['ROUTING_SERVICE'],
-            correlation_id=str(user_reference))
-        if user_reference in self.connections:
-            del self.connections[user_reference]
-
-    def disconnect_fd(self, fd):
-        packet = {'command': 'disconnect'}
-        self.agent.publish(
-            obj=packet,
-            queue=env['ROUTING_SERVICE'],
-            correlation_id=str(fd))
-        if fd in self.connections:
-            del self.connections[fd]
+        file_descriptor = socket.fileno()
+        self.mailer.publish_disconnect(file_descriptor)
+        if file_descriptor in self.connections:
+            del self.connections[file_descriptor]
 
     def on_read(self, socket, data, buff):
         disconnect = False
+        file_descriptor = socket.fileno()
         while data:
             self.protocol.append(buff, data)
             data = self.protocol.load_packet(buff)
 
-            if self.protocol.still_loading(buff):
-                return
-            LOGGER.info('Client %s - packet loaded', socket.fileno())
+            if self.protocol.still_loading(buff): return
+            LOGGER.info('Client %s - packet loaded', file_descriptor)
 
             packet, error = self.protocol.parse(buff)
             if error:
-                LOGGER.info('Client %s - packet error, disconnecting', socket.fileno())
+                LOGGER.info('Client %s - packet error, disconnecting', file_descriptor)
                 disconnect = True
                 buff = self.protocol.compose(packet)
                 break
 
-            packet['command'] = 'process'
-            self.agent.publish(
-                obj=packet,
-                queue=env['ROUTING_SERVICE'],
-                correlation_id=str(socket.fileno()))
+            self.mailer.publish_request(packet, file_descriptor)
 
         if disconnect:
             self.on_disconnect(socket)
@@ -93,48 +63,45 @@ class GatewayServer(server.Server):
             self.unregister(socket)
 
     def on_write(self, socket):
-        if self.socket_alive(socket):
+        if socket.fileno() in self.connections:
             buff = self.protocol.new_stream()
             self.register_read(socket, buff)
         else:
             self.unregister(socket)
             self.safe_close(socket)
 
-    def loop(self):
-        packet, fd_str = self.agent.get()
-        if not packet:
-            return
+    # Process response from Router                       // gateway_server.py
+    def in_loop_action(self):
+        # Get packet from mailer service
+        packet, fd, state = self.mailer.get()
+        if not (packet or fd or state): return
 
-        fd = int(fd_str)
-
-        command = packet.get('command')
-        del packet['command']
-
-        client = self.get_socket(fd)
-
-        if not client:
-            self.disconnect_fd(fd)
-            return
+        # Delete file descriptor if client socket not valid or disconnected 
+        client_socket = self.connections.get(fd)
+        socket_invalid = False
         try:
-            client.getpeername()
-        except OSError:
-            self.disconnect_fd(fd)
-            return
+            client_socket.getpeername()
+        except (OSError, AttributeError):
+            socket_invalid = True
+        if socket_invalid or state == 'disconnect': 
+            self.mailer.publish_disconnect(fd)
+            if fd in self.connections: del self.connections[fd]
+            if socket_invalid: return
 
-        if command == 'disconnect':
-            self.disconnect_fd(fd)
-
+        # Send package to client, after writing disconnect, listen or ignore
         if packet:
-            buff = self.protocol.compose(packet)
-            self.register_write(client, buff)
-        elif command == 'disconnect':
-            self.unregister(client)
-            self.safe_close(client)
-        elif command == 'read':
-            buff = self.protocol.new_stream()
-            self.register_read(client, buff)
-        else:
-            self.unregister(client)
+            package_buffer = self.protocol.compose(packet)
+            self.register_write(client_socket, package_buffer)
+        # Disconnect client socket
+        elif state == 'disconnect':
+            self.unregister(client_socket)
+            self.safe_close(client_socket)
+        # Listen on client socket
+        elif state == 'read':
+            package_buffer = self.protocol.new_stream()
+            self.register_read(client_socket, package_buffer)
+        # Ignore client
+        else: self.unregister(client_socket)
 
     def on_close(self, packet):
         if len(self.connections) > 0:
@@ -142,15 +109,15 @@ class GatewayServer(server.Server):
                 self.unregister(client)
             self.connections = {}
 
-    def get_socket(self, addr):
-        return self.connections.get(addr, None)
+    # def get_socket(self, addr):
+    #     return self.connections.get(addr)
 
-    def put_socket(self, socket):
-        self.connections[socket.fileno()] = socket
+    # def put_socket(self, socket):
+    #     self.connections[socket.fileno()] = socket
 
-    def socket_alive(self, socket):
-        return socket.fileno() in self.connections
+    # def socket_alive(self, socket):
+    #     return socket.fileno() in self.connections
 
-    def sock2addr(self, socket):
-        pair = socket.getpeername()
-        return f"{pair[0]}:{str(pair[1])}"
+    # def sock2addr(self, socket):
+    #     pair = socket.getpeername()
+    #     return f"{pair[0]}:{str(pair[1])}"

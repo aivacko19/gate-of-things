@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+	<div class="container">
+		<div class="jumbotron">
+			<div class='row'>
+				<div class='col'>
+					<dl>
+						<form action="{{ url_for('new_device') }}" method="post">
+							<dt>Device Name</dt>
+							<dd>
+								<input type="text" class="form-control" name="name">
+							</dd>
+							<dt>Enter New Key</dt>
+							<dd>
+								<input type="text" class="form-control" name="key">
+							</dd>
+							<dt><button type="submit" class="btn btn-primary">Submit</button>
+  							</dt><dd></dd>
+						</form>
+					</dl>
+				</div>
+			</div>
+			{% if error_key %}
+			<div class='row'>
+				<div class='col'>
+					<p>Key has to have 32 bits</p>
+				</div>
+			</div>
+			{% endif %}
+			{% if error_name %}
+			<div class='row'>
+				<div class='col'>
+					<p>Name is already taken</p>
+				</div>
+			</div>
+			{% endif %}
+		</div>
+	</div>
+{% endblock %}

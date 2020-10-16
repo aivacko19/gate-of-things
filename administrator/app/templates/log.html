@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+	<div class="container">
+		<div class="jumbotron">
+			<div class='row'>
+				<div class='col'>
+					<p>Device Name:</p>
+					<p>{{ device['name'] }}</p>
+				</div>
+			</div>
+			<div class='row'>
+				<div class='col'>
+					<table class='table table-sm'>
+						<thead>
+							<tr>
+								<th scope='col'>User</th>
+								<th scope='col'>Action</th>
+								<th scope='col'>Success</th>
+								<th scope='col'>Access Time</th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for log in logs %}
+							<tr>
+								<td>{{ log['user'] }}</td>
+								<td>{{ log['action'] }}</td>
+								<td>{{ log['success'] }}</td>
+								<td>{{ log['access_time'] }}</td>
+							</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+	</div>
+{% endblock %}

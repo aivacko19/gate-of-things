@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+	<div class="container">
+		<div class="jumbotron">
+			<div class='row'>
+				<div class='col'>
+					<dl>
+						<form action="{{ url_for('change_key', device_name=device['name']) }}" method="post">
+							<dt>Device Name</dt>
+							<dd>{{ device['name'] }}</dd>
+							<dt>Enter New Key</dt>
+							<dd>
+								<input type="text" class="form-control" name="new_key" 
+								placeholder="{{ device['key'] }}">
+							</dd>
+							<dt><button type="submit" class="btn btn-primary">Submit</button>
+  							</dt><dd></dd>
+						</form>
+					</dl>
+				</div>
+			</div>
+			{% if error %}
+			<div class='row'>
+				<div class='col'>
+					<p>Key has to have 32 bits</p>
+				</div>
+			</div>
+			{% endif %}
+		</div>
+	</div>
+{% endblock %}

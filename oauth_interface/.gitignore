@@ -1,0 +1,4 @@
+__pycache__/
+google_client_secret.json
+cert.pem
+key.pem

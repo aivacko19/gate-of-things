@@ -3,6 +3,7 @@ from .stream import Stream
 from . import const
 
 port = 1887
+port_safe = 8887
 
 def new_stream():
     return Stream()

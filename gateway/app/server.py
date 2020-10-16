@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import socket
+import ssl
 import selectors
 import logging
 import os 
@@ -8,15 +9,18 @@ import os
 LOGGER = logging.getLogger(__name__)
 
 class Server:
-    def __init__(self, host):
+    def __init__(self, host, port, safe_port):
         self.host = host
+        self.port = port
+        self.safe_port = safe_port
         self.stop_flag = False
         self.listener = None
+        self.listener_safe = None
         self.selector = None
 
-    def register_listener(self):
-        self.listener.setblocking(False)
-        self.selector.register(self.listener, selectors.EVENT_READ, data=None)
+    def register_listener(self, listener):
+        listener.setblocking(False)
+        self.selector.register(listener, selectors.EVENT_READ, data=None)
 
     def register_client(self, socket, data, mask):
         try:
@@ -54,11 +58,16 @@ class Server:
         if self.selector is not None:
             if self.listener is not None:
                 self.unregister(self.listener)
+            if self.listener_safe is not None:
+                self.unregister(self.listener_safe)
             self.selector.close()
             self.selector = None
         if self.listener is not None:
             self.listener.close()
             self.listener = None
+        if self.listener_safe is not None:
+            self.listener_safe.close()
+            self.listener_safe = None
 
     def get_empty_buffer(self):
         pass
@@ -90,81 +99,75 @@ class Server:
     def on_close(self):
         pass
 
-    def loop(self):
+    def in_loop_action(self):
         pass
 
+    def disconnect(self, client):
+        self.on_disconnect(client)
+        self.unregister(client)
+        self.safe_close(client)
+
+
     def start(self):
-        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.listener.bind((self.host, self.protocol.port))
-        self.listener.listen()
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        context.load_cert_chain(certfile='cert.pem', keyfile='key.pem')
+
         self.selector = selectors.DefaultSelector()
-        self.register_listener()
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((self.host, self.port))
+        listener.listen()
+        self.register_listener(listener)
+        self.listener = listener
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind((self.host, self.safe_port))
+        listener.listen()
+        self.register_listener(listener)
+        self.listener_safe = listener
+
         self.on_start()
 
         try:
+
+            # Server loop                                                            // server.py
             while True:
+                # Processing events from sockets
                 events = self.selector.select(timeout=0)
-                for key, mask in events:
-
+                for key, mask in events: 
+                    # Accept new connection from client
                     if key.data is None:
-                        client, addr = self.listener.accept()
-                        LOGGER.info('Client %s - connecting', client.fileno())
-                        buff = self.get_empty_buffer()
-                        self.register_client(client, buff, selectors.EVENT_READ)
+                        listener = key.fileobj
+                        client, addr = listener.accept()
+                        if listener == self.listener_safe: 
+                            client = context.wrap_socket(client, server_side=True)
+                        self.register_client(client, self.get_empty_buffer(), selectors.EVENT_READ)
                         self.on_connect(client)
-
                     else:
-                        client = key.fileobj
-                        buff = key.data
-
-                        # TODO Change address to file descriptor
-
-
+                        client, package_buffer = key.fileobj, key.data
+                        # Read package from client
                         if mask is selectors.EVENT_READ:
-                            LOGGER.info('Client %s - reading', client.fileno())
-
                             try:
                                 data = client.recv(4096)
-                            except BlockingIOError:
-                                # Resource temporarily unavailable (errno EWOULDBLOCK)
+                            except (BlockingIOError, ConnectionResetError):
                                 continue
-                            except ConnectionResetError:
-                                continue
-                            if not data:
-                                LOGGER.info('Client %s - disconnecting', client.fileno())
-                                self.on_disconnect(client)
-                                self.unregister(client)
-                                self.safe_close(client)
-                                continue
-
-                            self.on_read(client, data, buff)
-
+                            if not data: self.disconnect(client)
+                            else: self.on_read(client, data, package_buffer)
+                        # Write package to client
                         elif mask is selectors.EVENT_WRITE:
-                            LOGGER.info('Client %s - writing', client.fileno())
-
-                            data = self.get_data(buff, 4096)
-
+                            data = self.get_data(package_buffer, 4096)
                             try:
                                 sent = client.send(data)
                             except BlockingIOError:
-                                # Resource temporarily unavailable (errno EWOULDBLOCK)
                                 continue
+                            self.set_position(package_buffer, sent)
+                            if self.is_empty(package_buffer): self.on_write(client)
+                # Additional processing in each iteration implemented by child class
+                self.in_loop_action() 
 
-                            self.set_position(buff, sent)
-
-                            if not self.is_empty(buff):
-                                LOGGER.info('Client %s:%s - continue writing', addr[0], addr[1])
-                                continue
-                            
-
-                            LOGGER.info('Client %s:%s - finish writing', addr[0], addr[1])
-                            self.on_write(client)
-
-                self.loop()
-
-                if self.stop_flag:
-                    break
+                if self.stop_flag: break
 
         except KeyboardInterrupt:
             LOGGER.info('Caught keyboard interrupt, exiting...')

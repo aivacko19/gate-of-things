@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+	<div class="container">
+		<div class="jumbotron">
+			<div class='row'>
+				<div class='col'>
+					<a href="{{ url_for('new_device', device_name=key) }}" 
+						class="btn btn-primary" role='button'>Register Device</a>
+				</div>
+			</div>
+			<div class='row'>
+				<div class='col'>
+					<table class='table'>
+						<thead>
+							<tr>
+								<th scope='col'>Device Name</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody>
+							{% for key, value in devices.items() %}
+								<tr>
+									<td>{{ key }}</td>
+									<td><a href="{{ url_for('details', device_name=key) }}" 
+										class="btn btn-primary" role='button'>Details</a></td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+	</div>
+{% endblock %}
